@@ -593,14 +593,25 @@ button:disabled {
 }
 
 .floating-current::after {
-  content: attr(data-text);
+  content: "";
   position: absolute;
-  inset: 0;
+  top: -18%;
+  bottom: -18%;
+  left: 0;
+  width: 36%;
   overflow: hidden;
-  color: #22c55e;
-  clip-path: inset(0 calc(100% - var(--line-progress)) 0 0);
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 18%,
+    rgba(255, 255, 255, 0.34) 48%,
+    rgba(255, 255, 255, 0.08) 78%,
+    transparent 100%
+  );
+  filter: blur(1px);
+  opacity: 0.8;
+  pointer-events: none;
+  transform: translateX(calc((var(--line-progress) * 1.36) - 36%));
 }
 
 .floating-next {
