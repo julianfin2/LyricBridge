@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   findActiveLyricLine,
   parseLrc,
@@ -39,6 +40,11 @@ const loadedVideoId = ref<string | null>(null);
 const lyricFilePath = ref("");
 const offsetMs = ref(0);
 const saving = ref(false);
+const isLyricsWindow = new URLSearchParams(window.location.search).get("window") === "lyrics";
+
+if (isLyricsWindow) {
+  document.documentElement.classList.add("lyrics-root");
+}
 
 const parsedLrc = computed<ParsedLrc | null>(() => {
   if (!activeBinding.value) {
@@ -96,6 +102,25 @@ const nextLyric = computed(() => {
   }
 
   return parsedLrc.value.lines[activeLyricIndex.value + 1] ?? null;
+});
+
+const lyricProgress = computed(() => {
+  if (!parsedLrc.value || activeLyricIndex.value < 0) {
+    return 0;
+  }
+
+  const line = parsedLrc.value.lines[activeLyricIndex.value];
+  const nextLine = parsedLrc.value.lines[activeLyricIndex.value + 1];
+  if (!line || !nextLine) {
+    return 1;
+  }
+
+  const span = nextLine.time - line.time;
+  if (span <= 0) {
+    return 1;
+  }
+
+  return Math.min(1, Math.max(0, (syncedTime.value - line.time) / span));
 });
 
 const canSaveBinding = computed(() => Boolean(latestState.value?.videoId && lyricFilePath.value.trim()));
@@ -177,6 +202,26 @@ async function saveBinding() {
   }
 }
 
+async function chooseLyricFile() {
+  const selected = await open({
+    multiple: false,
+    filters: [
+      {
+        name: "LRC lyrics",
+        extensions: ["lrc"]
+      },
+      {
+        name: "Text files",
+        extensions: ["txt"]
+      }
+    ]
+  });
+
+  if (typeof selected === "string") {
+    lyricFilePath.value = selected;
+  }
+}
+
 function applyBinding(binding: LyricBindingWithContent) {
   activeBinding.value = binding;
   lyricFilePath.value = binding.lyricFilePath;
@@ -196,7 +241,16 @@ function formatTime(value: number | null): string {
 </script>
 
 <template>
-  <main class="shell">
+  <main v-if="isLyricsWindow" class="lyrics-window">
+    <section class="floating-lyrics" :style="{ '--line-progress': `${lyricProgress * 100}%` }">
+      <p class="floating-current" :data-text="currentLyric?.text || 'LyricBridge'">
+        {{ currentLyric?.text || "LyricBridge" }}
+      </p>
+      <p class="floating-next">{{ nextLyric?.text || "Waiting for bound YouTube lyrics" }}</p>
+    </section>
+  </main>
+
+  <main v-else class="shell">
     <section class="panel">
       <div class="status-row">
         <span class="status-dot" :class="{ active: serverStatus.running }" />
@@ -241,11 +295,14 @@ function formatTime(value: number | null): string {
       <form class="binding-form" @submit.prevent="saveBinding">
         <label>
           <span>LRC file path</span>
-          <input
-            v-model="lyricFilePath"
-            placeholder="F:\Lyrics\song.lrc"
-            spellcheck="false"
-          />
+          <div class="file-input-row">
+            <input
+              v-model="lyricFilePath"
+              placeholder="F:\Lyrics\song.lrc"
+              spellcheck="false"
+            />
+            <button class="secondary-button" type="button" @click="chooseLyricFile">Browse</button>
+          </div>
         </label>
 
         <label>
@@ -284,6 +341,12 @@ function formatTime(value: number | null): string {
 
 body {
   margin: 0;
+}
+
+html.lyrics-root,
+html.lyrics-root body,
+html.lyrics-root #app {
+  background: transparent;
 }
 
 button,
@@ -453,6 +516,18 @@ button:disabled {
   opacity: 0.55;
 }
 
+.secondary-button {
+  color: #1f2933;
+  background: #ffffff;
+  border-color: #cbd5df;
+}
+
+.file-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  gap: 8px;
+}
+
 .hint,
 .error {
   margin: 14px 0 0;
@@ -473,5 +548,63 @@ button:disabled {
   .binding-form {
     grid-template-columns: 1fr;
   }
+}
+
+.lyrics-window {
+  min-height: 100vh;
+  display: grid;
+  align-items: center;
+  padding: 12px 28px;
+  box-sizing: border-box;
+  background: transparent;
+  user-select: none;
+}
+
+.floating-lyrics {
+  --line-progress: 0%;
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+
+.floating-current,
+.floating-next {
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-shadow:
+    0 2px 3px rgba(0, 0, 0, 0.85),
+    0 0 2px rgba(0, 0, 0, 0.9),
+    1px 0 0 rgba(0, 0, 0, 0.95),
+    -1px 0 0 rgba(0, 0, 0, 0.95),
+    0 1px 0 rgba(0, 0, 0, 0.95),
+    0 -1px 0 rgba(0, 0, 0, 0.95);
+}
+
+.floating-current {
+  position: relative;
+  color: #f8fafc;
+  font-size: 42px;
+  font-weight: 900;
+  line-height: 1.18;
+}
+
+.floating-current::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  width: var(--line-progress);
+  overflow: hidden;
+  color: #22c55e;
+  white-space: nowrap;
+  text-overflow: clip;
+}
+
+.floating-next {
+  color: rgba(248, 250, 252, 0.82);
+  font-size: 24px;
+  font-weight: 750;
+  line-height: 1.25;
 }
 </style>

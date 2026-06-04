@@ -12,9 +12,22 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "LyricBridge",
         "width": 800,
         "height": 600
+      },
+      {
+        "label": "lyrics",
+        "url": "index.html?window=lyrics",
+        "title": "LyricBridge Lyrics",
+        "width": 1000,
+        "height": 150,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false
       }
     ],
     "security": {
