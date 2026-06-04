@@ -307,7 +307,7 @@ function formatTime(value: number | null): string {
 
         <label>
           <span>Offset ms</span>
-          <input v-model.number="offsetMs" type="number" step="50" />
+          <input v-model.number="offsetMs" type="number" step="1" />
         </label>
 
         <button type="submit" :disabled="!canSaveBinding || saving">
