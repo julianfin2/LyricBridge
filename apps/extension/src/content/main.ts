@@ -9,6 +9,7 @@ import type { ExtensionPlaybackStatus } from "../status";
 const BRIDGE_URL = "ws://127.0.0.1:32190";
 const HEARTBEAT_MS = 250;
 const RECONNECT_MS = 1_500;
+const YOUTUBE_PAGE_HOSTS = new Set(["www.youtube.com", "youtube.com", "music.youtube.com"]);
 
 let socket: WebSocket | null = null;
 let reconnectTimer: number | null = null;
@@ -148,7 +149,7 @@ function createStatusBase(video: HTMLVideoElement | null) {
     currentTime: video?.currentTime ?? 0,
     duration: video && Number.isFinite(video.duration) ? video.duration : null,
     hasVideo: Boolean(video),
-    isYouTubePage: location.hostname.endsWith("youtube.com"),
+    isYouTubePage: YOUTUBE_PAGE_HOSTS.has(location.hostname),
     paused: video?.paused ?? true,
     playbackRate: video?.playbackRate ?? 1,
     title: video ? readTitle() : null,
