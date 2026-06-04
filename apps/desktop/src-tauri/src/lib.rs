@@ -369,15 +369,15 @@ fn apply_overlay_settings(
         )))
         .map_err(|error| format!("Failed to size overlay window: {error}"))?;
 
-    if let (Some(x), Some(y)) = (settings.x, settings.y) {
-        window
-            .set_position(Position::Physical(PhysicalPosition::new(x, y)))
-            .map_err(|error| format!("Failed to position overlay window: {error}"))?;
+    let position = if let (Some(x), Some(y)) = (settings.x, settings.y) {
+        PhysicalPosition::new(x, y)
     } else {
-        window
-            .center()
-            .map_err(|error| format!("Failed to center overlay window: {error}"))?;
-    }
+        default_overlay_position(&window, settings)?
+    };
+
+    window
+        .set_position(Position::Physical(position))
+        .map_err(|error| format!("Failed to position overlay window: {error}"))?;
 
     window
         .set_always_on_top(settings.always_on_top)
@@ -414,6 +414,35 @@ fn register_overlay_window_events(app: &tauri::AppHandle) -> Result<(), String> 
     });
 
     Ok(())
+}
+
+fn default_overlay_position(
+    window: &WebviewWindow,
+    settings: &OverlaySettings,
+) -> Result<PhysicalPosition<i32>, String> {
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| format!("Failed to read current monitor: {error}"))?
+        .or(window
+            .primary_monitor()
+            .map_err(|error| format!("Failed to read primary monitor: {error}"))?);
+
+    let Some(monitor) = monitor else {
+        return Ok(PhysicalPosition::new(0, 0));
+    };
+
+    let monitor_position = monitor.position();
+    let monitor_size = monitor.size();
+    let width = settings.width as i32;
+    let height = settings.height as i32;
+    let monitor_width = monitor_size.width as i32;
+    let monitor_height = monitor_size.height as i32;
+
+    let x = monitor_position.x + ((monitor_width - width) / 2).max(0);
+    let y = monitor_position.y + ((monitor_height as f64 * 0.72) as i32 - height / 2);
+    let max_y = monitor_position.y + (monitor_height - height).max(0);
+
+    Ok(PhysicalPosition::new(x, y.clamp(monitor_position.y, max_y)))
 }
 
 fn update_overlay_geometry(

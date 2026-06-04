@@ -270,8 +270,13 @@ function formatTime(value: number | null): string {
 </script>
 
 <template>
-  <main v-if="isLyricsWindow" class="lyrics-window">
-    <section class="floating-lyrics" @mousedown="startOverlayDrag">
+  <main
+    v-if="isLyricsWindow"
+    class="lyrics-window"
+    :class="{ locked: overlaySettings.locked }"
+    @mousedown="startOverlayDrag"
+  >
+    <section class="floating-lyrics">
       <p class="floating-current">{{ currentLyric?.text || "LyricBridge" }}</p>
       <p class="floating-next">{{ nextLyric?.text || "Waiting for bound YouTube lyrics" }}</p>
     </section>
@@ -628,16 +633,30 @@ button:disabled {
   min-height: 100vh;
   display: grid;
   align-items: center;
-  padding: 12px 28px;
+  padding: 10px 26px;
+  border: 2px solid transparent;
+  border-radius: 8px;
   box-sizing: border-box;
   background: transparent;
+  cursor: move;
   user-select: none;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.lyrics-window:hover {
+  background: rgba(15, 23, 42, 0.08);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.lyrics-window.locked {
+  cursor: default;
 }
 
 .floating-lyrics {
   display: grid;
   gap: 6px;
-  cursor: move;
   text-align: center;
 }
 
