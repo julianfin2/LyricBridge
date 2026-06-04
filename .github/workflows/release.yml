@@ -58,6 +58,24 @@ jobs:
           }
           Copy-Item -LiteralPath $installer.FullName -Destination "release-assets/LyricBridge-Desktop-$version.msi"
 
+      - name: Package portable desktop app
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $appPath = "apps/desktop/src-tauri/target/release/LyricBridge.exe"
+          if (-not (Test-Path -LiteralPath $appPath)) {
+            throw "Tauri portable executable was not produced."
+          }
+          New-Item -ItemType Directory -Path portable-desktop -Force
+          Copy-Item -LiteralPath $appPath -Destination "portable-desktop/LyricBridge.exe"
+          $sevenZip = Join-Path $env:ProgramFiles "7-Zip/7z.exe"
+          if (-not (Test-Path -LiteralPath $sevenZip)) {
+            $sevenZip = (Get-Command 7z).Source
+          }
+          Push-Location portable-desktop
+          & $sevenZip a "../release-assets/LyricBridge-Desktop-$version.7z" "LyricBridge.exe"
+          Pop-Location
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
