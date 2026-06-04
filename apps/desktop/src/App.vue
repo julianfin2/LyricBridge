@@ -9,7 +9,7 @@ import {
   type ParsedLrc,
   type PlayerState
 } from "@lyricbridge/shared";
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 type BridgeServerStatus = {
   address: string;
@@ -51,6 +51,7 @@ const lyricFilePath = ref("");
 const offsetMs = ref(0);
 const saving = ref(false);
 const overlayHovered = ref(false);
+let overlayHoverTimer: number | null = null;
 const overlaySettings = ref<OverlaySettings>({
   locked: false,
   visible: true,
@@ -127,6 +128,11 @@ const nextLyric = computed(() => {
 const canSaveBinding = computed(() => Boolean(latestState.value?.videoId && lyricFilePath.value.trim()));
 
 onMounted(async () => {
+  if (isLyricsWindow) {
+    window.addEventListener("blur", hideOverlayFrame);
+    document.addEventListener("visibilitychange", hideOverlayFrame);
+  }
+
   await listen<BridgeServerStatus>("bridge-server-status", (event) => {
     serverStatus.value = event.payload;
   });
@@ -144,6 +150,16 @@ onMounted(async () => {
   await listen<string>("bridge-message-error", (event) => {
     latestError.value = event.payload;
   });
+});
+
+onBeforeUnmount(() => {
+  if (!isLyricsWindow) {
+    return;
+  }
+
+  window.removeEventListener("blur", hideOverlayFrame);
+  document.removeEventListener("visibilitychange", hideOverlayFrame);
+  clearOverlayHoverTimer();
 });
 
 watch(
@@ -232,6 +248,9 @@ async function setOverlayVisible(visible: boolean) {
 
 async function setOverlayLocked(locked: boolean) {
   overlaySettings.value = await invoke<OverlaySettings>("set_overlay_locked", { locked });
+  if (locked) {
+    hideOverlayFrame();
+  }
 }
 
 async function setOverlayAlwaysOnTop(alwaysOnTop: boolean) {
@@ -242,6 +261,30 @@ async function setOverlayAlwaysOnTop(alwaysOnTop: boolean) {
 
 async function resetOverlay() {
   overlaySettings.value = await invoke<OverlaySettings>("reset_overlay_position");
+}
+
+function showOverlayFrame() {
+  if (!isLyricsWindow || overlaySettings.value.locked) {
+    return;
+  }
+
+  overlayHovered.value = true;
+  clearOverlayHoverTimer();
+  overlayHoverTimer = window.setTimeout(hideOverlayFrame, 900);
+}
+
+function hideOverlayFrame() {
+  overlayHovered.value = false;
+  clearOverlayHoverTimer();
+}
+
+function clearOverlayHoverTimer() {
+  if (overlayHoverTimer === null) {
+    return;
+  }
+
+  window.clearTimeout(overlayHoverTimer);
+  overlayHoverTimer = null;
 }
 
 async function startOverlayDrag(event: MouseEvent) {
@@ -276,8 +319,10 @@ function formatTime(value: number | null): string {
     class="lyrics-window"
     :class="{ locked: overlaySettings.locked, hovered: overlayHovered }"
     @mousedown="startOverlayDrag"
-    @mouseenter="overlayHovered = true"
-    @mouseleave="overlayHovered = false"
+    @mouseenter="showOverlayFrame"
+    @mousemove="showOverlayFrame"
+    @mouseleave="hideOverlayFrame"
+    @mouseout="hideOverlayFrame"
   >
     <section class="floating-lyrics">
       <p class="floating-current">{{ currentLyric?.text || "LyricBridge" }}</p>
