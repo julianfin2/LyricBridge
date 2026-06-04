@@ -2,6 +2,10 @@ node_modules/
 dist/
 target/
 target-check*/
+_tmp_*
+
+.env
+.env.*
 
 apps/*/node_modules/
 apps/*/dist/

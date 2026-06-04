@@ -1,0 +1,70 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build browser extension
+        run: pnpm build:extension
+
+      - name: Package browser extension
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release-assets -Force
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $zipPath = "release-assets/LyricBridge-Extension-$version.zip"
+          Compress-Archive -Path "apps/extension/dist/*" -DestinationPath $zipPath -Force
+
+      - name: Build desktop app
+        run: pnpm build:desktop
+
+      - name: Collect desktop installer
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $installer = Get-ChildItem -Path "apps/desktop/src-tauri/target/release/bundle/msi" -Filter "*.msi" | Select-Object -First 1
+          if (-not $installer) {
+            throw "Tauri MSI installer was not produced."
+          }
+          Copy-Item -LiteralPath $installer.FullName -Destination "release-assets/LyricBridge-Desktop-$version.msi"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release-assets/*
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
