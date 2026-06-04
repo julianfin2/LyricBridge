@@ -62,6 +62,23 @@ header p,
   border-radius: 14px;
 }
 
+.notice div {
+  min-width: 0;
+}
+
+.notice strong {
+  display: block;
+  margin-bottom: 2px;
+  color: #172033;
+  font-size: 15px;
+}
+
+.notice p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .pulse {
   width: 10px;
   height: 10px;
@@ -69,6 +86,29 @@ header p,
   border-radius: 999px;
   background: #14b8a6;
   box-shadow: 0 0 0 5px rgba(20, 184, 166, 0.13);
+}
+
+.notice.idle .pulse {
+  background: #38bdf8;
+  box-shadow: 0 0 0 5px rgba(56, 189, 248, 0.14);
+}
+
+.notice.paused .pulse {
+  background: #f59e0b;
+  box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.14);
+}
+
+.notice.warn .pulse {
+  background: #ef4444;
+  box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.12);
+}
+
+.notice.ok {
+  border-color: rgba(20, 184, 166, 0.3);
+}
+
+.notice.warn {
+  border-color: rgba(239, 68, 68, 0.22);
 }
 
 dl {

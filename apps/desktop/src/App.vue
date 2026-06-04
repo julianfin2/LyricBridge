@@ -187,6 +187,30 @@ const extensionStatusLabel = computed(() => {
   return `${connectionStatus.value.connectedClients} 个连接`;
 });
 
+const primaryStatus = computed(() => {
+  if (!serverStatus.value.running) {
+    return { kind: "offline", label: "桥接服务离线" };
+  }
+
+  if (connectionStatus.value.connectedClients <= 0) {
+    return { kind: "waiting", label: "等待扩展连接" };
+  }
+
+  if (!latestState.value) {
+    return { kind: "waiting", label: "等待 YouTube 播放" };
+  }
+
+  if (!activeBinding.value || !parsedLrc.value) {
+    return { kind: "warning", label: "未找到歌词配置" };
+  }
+
+  if (latestState.value.paused) {
+    return { kind: "paused", label: "已暂停同步" };
+  }
+
+  return { kind: "online", label: "正在同步歌词" };
+});
+
 onMounted(async () => {
   await listen<BridgeServerStatus>("bridge-server-status", (event) => {
     serverStatus.value = event.payload;
@@ -380,9 +404,9 @@ function formatLastUpdate(value: number | null): string {
         </div>
       </div>
       <div class="status-stack">
-        <div class="status-pill" :class="{ online: serverStatus.running }">
+        <div class="status-pill" :class="primaryStatus.kind">
           <span class="status-dot" />
-          <span>{{ serverStatus.running ? "桥接服务已启动" : "桥接服务离线" }}</span>
+          <span>{{ primaryStatus.label }}</span>
         </div>
         <small>{{ serverStatus.address }}</small>
       </div>
@@ -617,6 +641,24 @@ h1 {
   font-weight: 700;
 }
 
+.status-pill.waiting {
+  color: #075985;
+  background: #eff6ff;
+  border-color: rgba(14, 165, 233, 0.24);
+}
+
+.status-pill.warning {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: rgba(245, 158, 11, 0.26);
+}
+
+.status-pill.paused {
+  color: #854d0e;
+  background: #fefce8;
+  border-color: rgba(234, 179, 8, 0.28);
+}
+
 .status-pill.online {
   color: #065f46;
   background: #e8fff4;
@@ -629,6 +671,17 @@ h1 {
   border-radius: 999px;
   background: #ef4444;
   box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12);
+}
+
+.status-pill.waiting .status-dot {
+  background: #38bdf8;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.14);
+}
+
+.status-pill.warning .status-dot,
+.status-pill.paused .status-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.14);
 }
 
 .status-pill.online .status-dot {

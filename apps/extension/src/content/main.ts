@@ -4,6 +4,7 @@ import {
   type BridgeMessage,
   type PlayerState
 } from "@lyricbridge/shared";
+import type { ExtensionPlaybackStatus } from "../status";
 
 const BRIDGE_URL = "ws://127.0.0.1:32190";
 const HEARTBEAT_MS = 250;
@@ -25,9 +26,18 @@ function connect() {
   }
 
   socket = new WebSocket(BRIDGE_URL);
-  socket.addEventListener("open", sendPlayerState);
-  socket.addEventListener("close", scheduleReconnect);
-  socket.addEventListener("error", scheduleReconnect);
+  socket.addEventListener("open", () => {
+    publishStatus();
+    sendPlayerState();
+  });
+  socket.addEventListener("close", () => {
+    publishStatus();
+    scheduleReconnect();
+  });
+  socket.addEventListener("error", () => {
+    publishStatus();
+    scheduleReconnect();
+  });
 }
 
 function scheduleReconnect() {
@@ -50,6 +60,7 @@ function startHeartbeat() {
 
   heartbeatTimer = window.setInterval(() => {
     bindCurrentVideo();
+    publishStatus();
     sendPlayerState();
   }, HEARTBEAT_MS);
 }
@@ -78,6 +89,7 @@ function observeUrlChanges() {
     lastUrl = location.href;
     observedVideo = null;
     bindCurrentVideo();
+    publishStatus();
     sendPlayerState();
   }, 500);
 }
@@ -101,6 +113,21 @@ function sendPlayerState() {
   socket.send(JSON.stringify(message));
 }
 
+function publishStatus() {
+  bindCurrentVideo();
+
+  const status: ExtensionPlaybackStatus = {
+    ...createStatusBase(observedVideo),
+    bridgeConnected: socket?.readyState === WebSocket.OPEN,
+    tabId: null,
+    updatedAt: Date.now()
+  };
+
+  chrome.runtime.sendMessage({ type: "lyricbridge-status", payload: status }).catch(() => {
+    // The popup/background can be unavailable during extension reloads.
+  });
+}
+
 function createPlayerState(video: HTMLVideoElement): PlayerState {
   return {
     protocolVersion: BRIDGE_PROTOCOL_VERSION,
@@ -113,6 +140,20 @@ function createPlayerState(video: HTMLVideoElement): PlayerState {
     paused: video.paused,
     playbackRate: video.playbackRate,
     observedAt: Date.now()
+  };
+}
+
+function createStatusBase(video: HTMLVideoElement | null) {
+  return {
+    currentTime: video?.currentTime ?? 0,
+    duration: video && Number.isFinite(video.duration) ? video.duration : null,
+    hasVideo: Boolean(video),
+    isYouTubePage: location.hostname.endsWith("youtube.com"),
+    paused: video?.paused ?? true,
+    playbackRate: video?.playbackRate ?? 1,
+    title: video ? readTitle() : null,
+    url: location.href,
+    videoId: parseYouTubeVideoId(location.href)
   };
 }
 
