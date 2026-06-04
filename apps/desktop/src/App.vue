@@ -104,25 +104,6 @@ const nextLyric = computed(() => {
   return parsedLrc.value.lines[activeLyricIndex.value + 1] ?? null;
 });
 
-const lyricProgress = computed(() => {
-  if (!parsedLrc.value || activeLyricIndex.value < 0) {
-    return 0;
-  }
-
-  const line = parsedLrc.value.lines[activeLyricIndex.value];
-  const nextLine = parsedLrc.value.lines[activeLyricIndex.value + 1];
-  if (!line || !nextLine) {
-    return 1;
-  }
-
-  const span = nextLine.time - line.time;
-  if (span <= 0) {
-    return 1;
-  }
-
-  return Math.min(1, Math.max(0, (syncedTime.value - line.time) / span));
-});
-
 const canSaveBinding = computed(() => Boolean(latestState.value?.videoId && lyricFilePath.value.trim()));
 
 onMounted(async () => {
@@ -244,10 +225,8 @@ function formatTime(value: number | null): string {
 
 <template>
   <main v-if="isLyricsWindow" class="lyrics-window">
-    <section class="floating-lyrics" :style="{ '--line-progress': `${lyricProgress * 100}%` }">
-      <p class="floating-current" :data-text="currentLyric?.text || 'LyricBridge'">
-        {{ currentLyric?.text || "LyricBridge" }}
-      </p>
+    <section class="floating-lyrics">
+      <p class="floating-current">{{ currentLyric?.text || "LyricBridge" }}</p>
       <p class="floating-next">{{ nextLyric?.text || "Waiting for bound YouTube lyrics" }}</p>
     </section>
   </main>
@@ -563,7 +542,6 @@ button:disabled {
 }
 
 .floating-lyrics {
-  --line-progress: 0%;
   display: grid;
   gap: 6px;
   text-align: center;
@@ -590,30 +568,6 @@ button:disabled {
   font-size: 42px;
   font-weight: 900;
   line-height: 1.18;
-}
-
-.floating-current::after {
-  content: attr(data-text);
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  color: transparent;
-  background-image: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.12) 42%,
-    rgba(255, 255, 255, 0.5) 50%,
-    rgba(255, 255, 255, 0.12) 58%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  background-position: calc(100% - var(--line-progress)) 0;
-  background-size: 220% 100%;
-  background-clip: text;
-  opacity: 0.75;
-  pointer-events: none;
-  text-shadow: none;
-  transition: background-position 260ms linear;
-  -webkit-background-clip: text;
 }
 
 .floating-next {
