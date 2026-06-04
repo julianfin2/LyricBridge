@@ -638,7 +638,7 @@ h1 {
 
 .hero-band {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
   gap: 14px;
   padding: 16px 22px 0;
 }
@@ -712,7 +712,7 @@ dd {
 
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
   gap: 14px;
   padding: 12px 22px 18px;
 }
