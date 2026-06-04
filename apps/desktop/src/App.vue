@@ -330,31 +330,30 @@ function formatLastUpdate(value: number | null): string {
   </main>
 
   <main v-else class="shell">
-    <section class="panel">
-      <div class="status-row">
-        <span class="status-dot" :class="{ active: serverStatus.running }" />
-        <span>
-          {{ serverStatus.running ? "桥接服务已启动" : "桥接服务离线" }}
-          <small>{{ serverStatus.address }}</small>
-        </span>
+    <header class="topbar">
+      <div class="brand">
+        <img src="/icon.png" alt="" />
+        <div>
+          <h1>LyricBridge</h1>
+          <p>YouTube 桌面歌词桥接工具</p>
+        </div>
       </div>
+      <div class="status-stack">
+        <div class="status-pill" :class="{ online: serverStatus.running }">
+          <span class="status-dot" />
+          <span>{{ serverStatus.running ? "桥接服务已启动" : "桥接服务离线" }}</span>
+        </div>
+        <small>{{ serverStatus.address }}</small>
+      </div>
+    </header>
 
-      <header>
-        <h1>LyricBridge</h1>
-        <p>YouTube 桌面歌词桥接工具</p>
-      </header>
-
-      <section class="now-playing">
+    <section class="hero-band">
+      <div class="now-playing">
         <span class="eyebrow">正在播放</span>
         <strong>{{ videoLabel }}</strong>
         <span>{{ progressLabel }}</span>
-      </section>
-
+      </div>
       <dl class="metrics">
-        <div>
-          <dt>视频 ID</dt>
-          <dd>{{ latestState?.videoId || "未检测到" }}</dd>
-        </div>
         <div>
           <dt>状态</dt>
           <dd>{{ latestState ? (latestState.paused ? "已暂停" : "播放中") : "空闲" }}</dd>
@@ -372,71 +371,85 @@ function formatLastUpdate(value: number | null): string {
           <dd>{{ formatLastUpdate(connectionStatus.lastMessageAt) }}</dd>
         </div>
       </dl>
+    </section>
 
-      <section class="lyrics">
-        <span class="eyebrow">歌词</span>
+    <section class="content-grid">
+      <section class="lyrics surface primary-surface">
+        <div class="section-heading">
+          <span class="eyebrow">歌词</span>
+          <span class="video-id">{{ latestState?.videoId || "未检测到视频 ID" }}</span>
+        </div>
         <p class="current-line">{{ currentLyric?.text || "当前没有歌词" }}</p>
         <p class="next-line">{{ nextLyric?.text || "配置目录中未找到该视频的歌词" }}</p>
-      </section>
-
-      <section class="overlay-controls">
-        <span class="eyebrow">桌面歌词窗口</span>
-        <div class="control-row">
-          <button
-            class="secondary-button"
-            type="button"
-            @click="setOverlayVisible(!overlaySettings.visible)"
-          >
-            {{ overlaySettings.visible ? "隐藏" : "显示" }}
-          </button>
-          <button
-            class="secondary-button"
-            type="button"
-            @click="setOverlayLocked(!overlaySettings.locked)"
-          >
-            {{ overlaySettings.locked ? "解锁" : "锁定" }}
-          </button>
-          <button
-            class="secondary-button"
-            type="button"
-            @click="setOverlayAlwaysOnTop(!overlaySettings.alwaysOnTop)"
-          >
-            {{ overlaySettings.alwaysOnTop ? "取消置顶" : "保持置顶" }}
-          </button>
-          <button class="secondary-button" type="button" @click="resetOverlay">重置</button>
-        </div>
-        <p class="hint compact">
-          {{ overlaySettings.locked ? "已锁定：鼠标点击会穿透歌词窗口。" : "未锁定：拖动歌词窗口可移动位置。" }}
+        <p v-if="activeBinding" class="hint">
+          已加载 {{ parsedLrc?.lines.length ?? 0 }} 行歌词
         </p>
       </section>
 
-      <section class="config-controls">
-        <span class="eyebrow">配置目录</span>
-        <div class="config-row">
+      <aside class="side-column">
+        <section class="surface">
+          <div class="section-heading">
+            <span class="eyebrow">桌面歌词窗口</span>
+          </div>
+          <div class="control-row">
+            <button
+              class="secondary-button"
+              type="button"
+              @click="setOverlayVisible(!overlaySettings.visible)"
+            >
+              {{ overlaySettings.visible ? "隐藏" : "显示" }}
+            </button>
+            <button
+              class="secondary-button"
+              type="button"
+              @click="setOverlayLocked(!overlaySettings.locked)"
+            >
+              {{ overlaySettings.locked ? "解锁" : "锁定" }}
+            </button>
+            <button
+              class="secondary-button"
+              type="button"
+              @click="setOverlayAlwaysOnTop(!overlaySettings.alwaysOnTop)"
+            >
+              {{ overlaySettings.alwaysOnTop ? "取消置顶" : "保持置顶" }}
+            </button>
+            <button class="secondary-button" type="button" @click="resetOverlay">重置</button>
+          </div>
+          <p class="hint compact">
+            {{ overlaySettings.locked ? "已锁定：鼠标点击会穿透歌词窗口。" : "未锁定：拖动歌词窗口可移动位置。" }}
+          </p>
+        </section>
+
+        <section class="surface">
+          <div class="section-heading">
+            <span class="eyebrow">配置目录</span>
+            <span class="binding-count">{{ configDirectoryStatus.bindingCount }} 个绑定</span>
+          </div>
           <p class="path-display">
             {{ configDirectoryStatus.directory || "未选择配置目录" }}
           </p>
-          <button class="secondary-button" type="button" @click="chooseConfigDirectory">
-            浏览
-          </button>
-          <button class="secondary-button" type="button" @click="reloadConfigDirectory">
-            重载
-          </button>
-          <button class="secondary-button" type="button" @click="clearConfigDirectory">
-            清除
-          </button>
-        </div>
-        <p class="hint compact">
-          已从 bindings.json 加载 {{ configDirectoryStatus.bindingCount }} 个绑定
-        </p>
-        <p v-if="configDirectoryStatus.error" class="error compact">
-          {{ configDirectoryStatus.error }}
-        </p>
-      </section>
+          <div class="config-actions">
+            <button class="secondary-button" type="button" @click="chooseConfigDirectory">
+              浏览
+            </button>
+            <button class="secondary-button" type="button" @click="reloadConfigDirectory">
+              重载
+            </button>
+            <button class="secondary-button" type="button" @click="clearConfigDirectory">
+              清除
+            </button>
+          </div>
+          <p v-if="activeBinding" class="hint compact">
+            {{ activeBinding.lyricFilePath }}
+          </p>
+          <p v-if="configDirectoryStatus.error" class="error compact">
+            {{ configDirectoryStatus.error }}
+          </p>
+        </section>
+      </aside>
+    </section>
 
-      <p v-if="activeBinding" class="hint">
-        已从 {{ activeBinding.lyricFilePath }} 加载 {{ parsedLrc?.lines.length ?? 0 }} 行歌词
-      </p>
+    <section v-if="serverStatus.error || latestError || bindingError" class="error-list">
       <p v-if="serverStatus.error" class="error">{{ serverStatus.error }}</p>
       <p v-if="latestError" class="error">{{ latestError }}</p>
       <p v-if="bindingError" class="error">{{ bindingError }}</p>
@@ -446,8 +459,8 @@ function formatLastUpdate(value: number | null): string {
 
 <style>
 :root {
-  color: #1f2933;
-  background: #eef1f5;
+  color: #172033;
+  background: #edf4f6;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
@@ -483,164 +496,256 @@ input {
   height: 100vh;
   overflow: auto;
   padding: 0;
+  background:
+    linear-gradient(135deg, rgba(16, 185, 129, 0.12), transparent 38%),
+    linear-gradient(315deg, rgba(59, 130, 246, 0.12), transparent 34%),
+    #edf4f6;
   box-sizing: border-box;
 }
 
-.panel {
-  width: 100%;
-  min-height: 100%;
-  background: #ffffff;
-  border: 0;
-  border-radius: 0;
-  padding: 24px;
-  box-shadow: none;
-  box-sizing: border-box;
-}
-
-.status-row {
+.topbar {
+  min-height: 86px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: #52606d;
-  font-size: 14px;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 24px;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(142, 159, 176, 0.22);
+  box-sizing: border-box;
+  backdrop-filter: blur(14px);
 }
 
-.status-row small {
-  display: block;
-  color: #7b8794;
+.brand {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 14px;
 }
 
-.status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: #d64545;
-}
-
-.status-dot.active {
-  background: #2f9e44;
-}
-
-header {
-  margin: 24px 0 28px;
+.brand img {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border-radius: 12px;
 }
 
 h1 {
-  margin: 0 0 8px;
-  font-size: 34px;
-  line-height: 1.15;
+  margin: 0 0 4px;
+  font-size: 28px;
+  line-height: 1.1;
 }
 
-header p {
+.brand p {
   margin: 0;
-  color: #52606d;
+  color: #637083;
+  font-size: 14px;
 }
 
-.now-playing,
-.lyrics,
-.overlay-controls,
-.config-controls {
+.status-stack {
   display: grid;
-  gap: 6px;
-  padding: 18px;
-  background: #f7f9fb;
-  border: 1px solid #d9e0e8;
-  border-radius: 8px;
+  justify-items: end;
+  gap: 5px;
+  color: #637083;
+  font-size: 12px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  color: #7f1d1d;
+  background: #fff1f2;
+  border: 1px solid rgba(244, 63, 94, 0.28);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.status-pill.online {
+  color: #065f46;
+  background: #e8fff4;
+  border-color: rgba(16, 185, 129, 0.28);
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12);
+}
+
+.status-pill.online .status-dot {
+  background: #10b981;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.14);
+}
+
+.hero-band {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 1fr);
+  gap: 18px;
+  padding: 22px 24px 0;
+}
+
+.now-playing {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  min-height: 150px;
+  padding: 22px;
+  color: #f8fafc;
+  background:
+    linear-gradient(135deg, rgba(20, 184, 166, 0.92), rgba(37, 99, 235, 0.86)),
+    #0f766e;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 18px;
+  box-shadow: 0 18px 38px rgba(15, 118, 110, 0.2);
 }
 
 .now-playing strong {
-  font-size: 20px;
-  line-height: 1.3;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 26px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .eyebrow {
-  color: #66788a;
+  color: #64748b;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
-  text-transform: uppercase;
 }
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 14px;
-  margin: 18px 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
 }
 
-dt {
-  color: #66788a;
+.metrics div,
+.surface {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(142, 159, 176, 0.22);
+  border-radius: 16px;
+  box-shadow: 0 14px 30px rgba(43, 58, 84, 0.08);
+}
+
+.metrics div {
+  min-width: 0;
+  padding: 16px;
+}
+
+dt,
+.video-id,
+.binding-count {
+  color: #64748b;
   font-size: 13px;
 }
 
 dd {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   overflow-wrap: anywhere;
-  font-weight: 650;
+  color: #172033;
+  font-size: 18px;
+  font-weight: 750;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 1fr);
+  gap: 18px;
+  padding: 18px 24px 24px;
+}
+
+.surface {
+  min-width: 0;
+  padding: 18px;
+  box-sizing: border-box;
 }
 
 .lyrics {
-  margin-bottom: 18px;
+  display: grid;
+  gap: 12px;
 }
 
-.overlay-controls,
-.config-controls {
-  margin-bottom: 18px;
+.primary-surface {
+  min-height: 292px;
+  align-content: start;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.86)),
+    #ffffff;
+}
+
+.side-column {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.video-id,
+.binding-count {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.current-line {
+  min-height: 72px;
+  margin: 0;
+  color: #111827;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.28;
+}
+
+.next-line {
+  min-height: 32px;
+  margin: 0;
+  color: #64748b;
+  font-size: 18px;
+  line-height: 1.4;
 }
 
 .control-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.current-line {
-  min-height: 38px;
-  margin: 0;
-  color: #111827;
-  font-size: 28px;
-  font-weight: 800;
-  line-height: 1.35;
-}
-
-.next-line {
-  min-height: 24px;
-  margin: 0;
-  color: #66788a;
-  font-size: 17px;
-  line-height: 1.4;
-}
-
-label {
-  display: grid;
-  gap: 6px;
-}
-
-label span {
-  color: #52606d;
-  font-size: 13px;
-  font-weight: 650;
-}
-
-input {
-  min-width: 0;
-  height: 38px;
-  padding: 0 10px;
-  color: #1f2933;
-  background: #ffffff;
-  border: 1px solid #cbd5df;
-  border-radius: 6px;
-  box-sizing: border-box;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 button {
-  height: 38px;
+  min-width: 0;
+  height: 40px;
   color: #ffffff;
-  background: #2563eb;
-  border: 1px solid #1d4ed8;
-  border-radius: 6px;
+  background: #0f766e;
+  border: 1px solid rgba(15, 118, 110, 0.28);
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 700;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.14);
 }
 
 button:disabled {
@@ -649,56 +754,94 @@ button:disabled {
 }
 
 .secondary-button {
-  color: #1f2933;
-  background: #ffffff;
-  border-color: #cbd5df;
+  color: #172033;
+  background: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.34);
 }
 
-.config-row {
+.config-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(3, 88px);
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
 }
 
 .path-display {
   min-width: 0;
-  min-height: 38px;
+  min-height: 46px;
   display: flex;
   align-items: center;
-  margin: 0;
-  padding: 0 10px;
+  margin: 12px 0 0;
+  padding: 0 12px;
   overflow-wrap: anywhere;
-  color: #1f2933;
-  background: #ffffff;
-  border: 1px solid #cbd5df;
-  border-radius: 6px;
+  color: #172033;
+  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 10px;
   box-sizing: border-box;
 }
 
 .hint,
 .error {
-  margin: 14px 0 0;
+  margin: 12px 0 0;
   overflow-wrap: anywhere;
   font-size: 14px;
 }
 
 .hint {
-  color: #52606d;
+  color: #64748b;
 }
 
 .compact {
-  margin-top: 4px;
+  margin-top: 10px;
 }
 
 .error {
   color: #b42318;
 }
 
-@media (max-width: 680px) {
+.error-list {
+  margin: 0 24px 24px;
+  padding: 14px 16px;
+  background: #fff1f2;
+  border: 1px solid rgba(244, 63, 94, 0.22);
+  border-radius: 14px;
+}
+
+@media (max-width: 860px) {
+  .topbar,
+  .hero-band,
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .status-stack {
+    justify-items: start;
+  }
+
+  .hero-band,
+  .content-grid {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+@media (max-width: 560px) {
   .metrics,
   .control-row,
-  .config-row {
+  .config-actions {
     grid-template-columns: 1fr;
+  }
+
+  .now-playing strong,
+  .current-line {
+    font-size: 24px;
+    white-space: normal;
   }
 }
 

@@ -4,8 +4,19 @@ const bridgeAddress = "ws://127.0.0.1:32190";
 
 <template>
   <main>
-    <h1>LyricBridge</h1>
-    <p>打开 YouTube 视频，并保持 LyricBridge 桌面端运行。</p>
+    <header>
+      <img src="/icons/48x48.png" alt="" />
+      <div>
+        <h1>LyricBridge</h1>
+        <p>YouTube 歌词同步</p>
+      </div>
+    </header>
+
+    <section class="notice">
+      <span class="pulse" />
+      <p>等待 YouTube 播放状态</p>
+    </section>
+
     <dl>
       <div>
         <dt>桥接地址</dt>
