@@ -596,11 +596,11 @@ button:disabled {
   content: attr(data-text);
   position: absolute;
   inset: 0;
-  width: var(--line-progress);
   overflow: hidden;
   color: #22c55e;
+  clip-path: inset(0 calc(100% - var(--line-progress)) 0 0);
   white-space: nowrap;
-  text-overflow: clip;
+  text-overflow: ellipsis;
 }
 
 .floating-next {
