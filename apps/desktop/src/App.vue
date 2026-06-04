@@ -634,20 +634,10 @@ button:disabled {
   display: grid;
   align-items: center;
   padding: 10px 26px;
-  border-radius: 8px;
   box-sizing: border-box;
   background: transparent;
-  box-shadow: none;
   cursor: move;
   user-select: none;
-  transition:
-    box-shadow 120ms ease,
-    background-color 120ms ease;
-}
-
-.lyrics-window:hover {
-  background: rgba(15, 23, 42, 0.08);
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.32);
 }
 
 .lyrics-window.locked {
