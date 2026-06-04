@@ -28,13 +28,10 @@ type ConfigDirectoryStatus = {
   error: string | null;
 };
 
-type LyricBinding = {
+type LyricBindingWithContent = {
   videoId: string;
   lyricFilePath: string;
   offsetMs: number;
-};
-
-type LyricBindingWithContent = LyricBinding & {
   lyricText: string;
 };
 
@@ -67,9 +64,7 @@ const latestError = ref<string | null>(null);
 const bindingError = ref<string | null>(null);
 const activeBinding = ref<LyricBindingWithContent | null>(null);
 const loadedVideoId = ref<string | null>(null);
-const lyricFilePath = ref("");
 const offsetMs = ref(0);
-const saving = ref(false);
 const overlaySettings = ref<OverlaySettings>({
   locked: false,
   visible: true,
@@ -143,8 +138,6 @@ const nextLyric = computed(() => {
   return parsedLrc.value.lines[activeLyricIndex.value + 1] ?? null;
 });
 
-const canSaveBinding = computed(() => Boolean(latestState.value?.videoId && lyricFilePath.value.trim()));
-
 const extensionStatusLabel = computed(() => {
   if (connectionStatus.value.connectedClients <= 0) {
     return "Not connected";
@@ -212,7 +205,6 @@ function acceptPlayerState(nextState: PlayerState) {
 async function loadBinding(videoId: string) {
   bindingError.value = null;
   activeBinding.value = null;
-  lyricFilePath.value = "";
   offsetMs.value = 0;
 
   try {
@@ -227,53 +219,6 @@ async function loadBinding(videoId: string) {
     applyBinding(binding);
   } catch (error) {
     bindingError.value = String(error);
-  }
-}
-
-async function saveBinding() {
-  const videoId = latestState.value?.videoId;
-  if (!videoId) {
-    bindingError.value = "Open a YouTube video before saving a lyric binding.";
-    return;
-  }
-
-  saving.value = true;
-  bindingError.value = null;
-
-  try {
-    const binding = await invoke<LyricBindingWithContent>("save_lyric_binding", {
-      binding: {
-        videoId,
-        lyricFilePath: lyricFilePath.value.trim(),
-        offsetMs: Number(offsetMs.value) || 0
-      }
-    });
-
-    applyBinding(binding);
-  } catch (error) {
-    bindingError.value = String(error);
-  } finally {
-    saving.value = false;
-  }
-}
-
-async function chooseLyricFile() {
-  const selected = await open({
-    multiple: false,
-    filters: [
-      {
-        name: "LRC lyrics",
-        extensions: ["lrc"]
-      },
-      {
-        name: "Text files",
-        extensions: ["txt"]
-      }
-    ]
-  });
-
-  if (typeof selected === "string") {
-    lyricFilePath.value = selected;
   }
 }
 
@@ -340,7 +285,6 @@ async function startOverlayDrag(event: MouseEvent) {
 
 function applyBinding(binding: LyricBindingWithContent) {
   activeBinding.value = binding;
-  lyricFilePath.value = binding.lyricFilePath;
   offsetMs.value = binding.offsetMs;
 }
 
@@ -485,29 +429,6 @@ function formatLastUpdate(value: number | null): string {
           {{ configDirectoryStatus.error }}
         </p>
       </section>
-
-      <form class="binding-form" @submit.prevent="saveBinding">
-        <label>
-          <span>LRC file path</span>
-          <div class="file-input-row">
-            <input
-              v-model="lyricFilePath"
-              placeholder="F:\Lyrics\song.lrc"
-              spellcheck="false"
-            />
-            <button class="secondary-button" type="button" @click="chooseLyricFile">Browse</button>
-          </div>
-        </label>
-
-        <label>
-          <span>Offset ms</span>
-          <input v-model.number="offsetMs" type="number" step="1" />
-        </label>
-
-        <button type="submit" :disabled="!canSaveBinding || saving">
-          {{ saving ? "Saving" : "Save binding" }}
-        </button>
-      </form>
 
       <p v-if="activeBinding" class="hint">
         {{ parsedLrc?.lines.length ?? 0 }} lines loaded from {{ activeBinding.lyricFilePath }}
@@ -679,13 +600,6 @@ dd {
   line-height: 1.4;
 }
 
-.binding-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 130px 130px;
-  align-items: end;
-  gap: 12px;
-}
-
 label {
   display: grid;
   gap: 6px;
@@ -727,12 +641,6 @@ button:disabled {
   color: #1f2933;
   background: #ffffff;
   border-color: #cbd5df;
-}
-
-.file-input-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 88px;
-  gap: 8px;
 }
 
 .config-row {
@@ -777,7 +685,6 @@ button:disabled {
 
 @media (max-width: 680px) {
   .metrics,
-  .binding-form,
   .control-row,
   .config-row {
     grid-template-columns: 1fr;

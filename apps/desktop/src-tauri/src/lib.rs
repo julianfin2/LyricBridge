@@ -1,7 +1,6 @@
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     sync::Mutex,
@@ -60,14 +59,6 @@ impl Default for BridgeConnectionStatus {
             last_message_at: None,
         }
     }
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct LyricBinding {
-    video_id: String,
-    lyric_file_path: String,
-    offset_ms: i32,
 }
 
 #[derive(Clone, Serialize)]
@@ -130,11 +121,6 @@ impl Default for OverlaySettings {
             height: 150,
         }
     }
-}
-
-#[derive(Default, Deserialize, Serialize)]
-struct BindingsStore {
-    bindings: BTreeMap<String, LyricBinding>,
 }
 
 #[tauri::command]
@@ -242,33 +228,7 @@ fn get_lyric_binding(
     app: tauri::AppHandle,
     video_id: String,
 ) -> Result<Option<LyricBindingWithContent>, String> {
-    if let Some(binding) = read_external_lyric_binding(&app, &video_id)? {
-        return Ok(Some(binding));
-    }
-
-    let store = read_bindings_store(&app)?;
-    let Some(binding) = store.bindings.get(&video_id) else {
-        return Ok(None);
-    };
-
-    read_binding_content(binding).map(Some)
-}
-
-#[tauri::command]
-fn save_lyric_binding(
-    app: tauri::AppHandle,
-    binding: LyricBinding,
-) -> Result<LyricBindingWithContent, String> {
-    if binding.video_id.trim().is_empty() {
-        return Err("Video ID is required".to_string());
-    }
-
-    let content = read_binding_content(&binding)?;
-    let mut store = read_bindings_store(&app)?;
-    store.bindings.insert(binding.video_id.clone(), binding);
-    write_bindings_store(&app, &store)?;
-
-    Ok(content)
+    read_external_lyric_binding(&app, &video_id)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -305,8 +265,7 @@ pub fn run() {
             set_overlay_locked,
             set_overlay_visible,
             start_overlay_drag,
-            get_lyric_binding,
-            save_lyric_binding
+            get_lyric_binding
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -413,18 +372,6 @@ fn now_ms() -> u64 {
         .unwrap_or_default()
 }
 
-fn read_binding_content(binding: &LyricBinding) -> Result<LyricBindingWithContent, String> {
-    let lyric_text = fs::read_to_string(&binding.lyric_file_path)
-        .map_err(|error| format!("Failed to read lyric file: {error}"))?;
-
-    Ok(LyricBindingWithContent {
-        video_id: binding.video_id.clone(),
-        lyric_file_path: binding.lyric_file_path.clone(),
-        offset_ms: binding.offset_ms,
-        lyric_text,
-    })
-}
-
 fn read_external_lyric_binding(
     app: &tauri::AppHandle,
     video_id: &str,
@@ -470,38 +417,6 @@ fn resolve_config_lyric_path(config_dir: &Path, lyric_file: &str) -> PathBuf {
     } else {
         config_dir.join(path)
     }
-}
-
-fn read_bindings_store(app: &tauri::AppHandle) -> Result<BindingsStore, String> {
-    let path = bindings_store_path(app)?;
-
-    if !path.exists() {
-        return Ok(BindingsStore::default());
-    }
-
-    let text = fs::read_to_string(&path)
-        .map_err(|error| format!("Failed to read bindings store: {error}"))?;
-    serde_json::from_str(&text).map_err(|error| format!("Failed to parse bindings store: {error}"))
-}
-
-fn write_bindings_store(app: &tauri::AppHandle, store: &BindingsStore) -> Result<(), String> {
-    let path = bindings_store_path(app)?;
-
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("Failed to create app data directory: {error}"))?;
-    }
-
-    let text = serde_json::to_string_pretty(store)
-        .map_err(|error| format!("Failed to serialize bindings store: {error}"))?;
-    fs::write(path, text).map_err(|error| format!("Failed to write bindings store: {error}"))
-}
-
-fn bindings_store_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|dir| dir.join("bindings.json"))
-        .map_err(|error| format!("Failed to resolve app data directory: {error}"))
 }
 
 fn config_directory_status(app: &tauri::AppHandle) -> ConfigDirectoryStatus {

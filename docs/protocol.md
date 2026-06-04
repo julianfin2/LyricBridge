@@ -34,21 +34,9 @@ and render lyrics from its own local timer between snapshots.
 }
 ```
 
-## Desktop Binding Model
-
-The first persistent binding table should map a YouTube video ID to a local LRC
-file and per-video timing offset.
-
-```text
-video_id -> lyric_file_path -> offset_ms
-```
-
-`offset_ms` is required because YouTube uploads often contain intros, silence,
-or MV-only timing that does not match a normal LRC file exactly.
-
 ## Config Directory
 
-LyricBridge can load bindings from a user-selected config directory. The
+LyricBridge loads lyric bindings from a user-selected config directory. The
 directory must contain `bindings.json`.
 
 ```json
@@ -66,4 +54,5 @@ directory must contain `bindings.json`.
 `lyricFile` may be an absolute path or a relative path. Relative paths are
 resolved from the selected config directory.
 
-Config directory bindings take priority over the app's manual local bindings.
+`offsetMs` is required because YouTube uploads often contain intros, silence, or
+MV-only timing that does not match a normal LRC file exactly.
