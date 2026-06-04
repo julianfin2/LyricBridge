@@ -142,10 +142,10 @@ function formatTime(value: number | null): string {
         <dt>桥接地址</dt>
         <dd>{{ bridgeAddress }}</dd>
       </div>
-      <div>
+      <!-- <div>
         <dt>作用范围</dt>
         <dd>仅 YouTube 页面</dd>
-      </div>
+      </div> -->
     </dl>
   </main>
 </template>

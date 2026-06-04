@@ -2,7 +2,7 @@
 name = "lyricbridge-desktop"
 version = "0.1.0"
 description = "Desktop lyrics bridge for browser playback"
-authors = ["LyricBridge contributors"]
+authors = ["Julian F."]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

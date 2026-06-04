@@ -375,6 +375,8 @@ function formatLastUpdate(value: number | null): string {
 
   return new Date(value).toLocaleTimeString(undefined, {
     hour: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
     minute: "2-digit",
     second: "2-digit"
   });
@@ -408,7 +410,7 @@ function formatLastUpdate(value: number | null): string {
           <span class="status-dot" />
           <span>{{ primaryStatus.label }}</span>
         </div>
-        <small>{{ serverStatus.address }}</small>
+        <!-- <small>{{ serverStatus.address }}</small> -->
       </div>
     </header>
 
