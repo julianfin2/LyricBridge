@@ -138,6 +138,14 @@ const previousLyric = computed(() => {
   return parsedLrc.value.lines[activeLyricIndex.value - 1] ?? null;
 });
 
+const earlierLyric = computed(() => {
+  if (!parsedLrc.value || activeLyricIndex.value <= 1) {
+    return null;
+  }
+
+  return parsedLrc.value.lines[activeLyricIndex.value - 2] ?? null;
+});
+
 const nextLyric = computed(() => {
   if (!parsedLrc.value || activeLyricIndex.value < 0) {
     return null;
@@ -152,6 +160,14 @@ const upcomingLyric = computed(() => {
   }
 
   return parsedLrc.value.lines[activeLyricIndex.value + 2] ?? null;
+});
+
+const laterLyric = computed(() => {
+  if (!parsedLrc.value || activeLyricIndex.value < 0) {
+    return null;
+  }
+
+  return parsedLrc.value.lines[activeLyricIndex.value + 3] ?? null;
 });
 
 const playbackProgressPercent = computed(() => {
@@ -405,17 +421,21 @@ function formatLastUpdate(value: number | null): string {
           <span class="video-id">{{ latestState?.videoId || "未检测到视频 ID" }}</span>
         </div>
         <div class="lyric-context">
+          <p class="context-line faded">{{ earlierLyric?.text || " " }}</p>
           <p class="context-line muted">{{ previousLyric?.text || " " }}</p>
           <p class="current-line">{{ currentLyric?.text || "当前没有歌词" }}</p>
           <p class="context-line">{{ nextLyric?.text || "配置目录中未找到该视频的歌词" }}</p>
           <p class="context-line muted">{{ upcomingLyric?.text || " " }}</p>
+          <p class="context-line faded">{{ laterLyric?.text || " " }}</p>
         </div>
-        <div class="lyric-progress">
-          <span :style="{ width: `${playbackProgressPercent}%` }" />
-        </div>
-        <div class="lyric-footer">
-          <span>{{ progressLabel }}</span>
-          <span v-if="activeBinding">已加载 {{ parsedLrc?.lines.length ?? 0 }} 行歌词</span>
+        <div class="lyric-bottom">
+          <div class="lyric-progress">
+            <span :style="{ width: `${playbackProgressPercent}%` }" />
+          </div>
+          <div class="lyric-footer">
+            <span>{{ progressLabel }}</span>
+            <span v-if="activeBinding">已加载 {{ parsedLrc?.lines.length ?? 0 }} 行歌词</span>
+          </div>
         </div>
       </section>
 
@@ -472,9 +492,9 @@ function formatLastUpdate(value: number | null): string {
               清除
             </button>
           </div>
-          <p v-if="activeBinding" class="hint compact">
+          <!-- <p v-if="activeBinding" class="hint compact">
             {{ activeBinding.lyricFilePath }}
-          </p>
+          </p> -->
           <p v-if="configDirectoryStatus.error" class="error compact">
             {{ configDirectoryStatus.error }}
           </p>
@@ -705,12 +725,13 @@ dd {
 
 .lyrics {
   display: grid;
-  gap: 10px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
 }
 
 .primary-surface {
   min-height: 214px;
-  align-content: start;
+  padding-bottom: 10px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.86)),
     #ffffff;
@@ -740,8 +761,11 @@ dd {
 
 .lyric-context {
   display: grid;
-  gap: 4px;
+  align-content: center;
+  gap: 9px;
   min-width: 0;
+  min-height: 0;
+  text-align: center;
 }
 
 .current-line,
@@ -754,20 +778,28 @@ dd {
 
 .current-line {
   color: #111827;
-  font-size: 28px;
+  font-size: 29px;
   font-weight: 800;
   line-height: 1.28;
 }
 
 .context-line {
-  min-height: 23px;
   color: #64748b;
-  font-size: 15px;
-  line-height: 1.45;
+  font-size: 16px;
+  line-height: 1.35;
 }
 
 .context-line.muted {
   color: #94a3b8;
+}
+
+.context-line.faded {
+  color: #c0cad7;
+}
+
+.lyric-bottom {
+  display: grid;
+  gap: 8px;
 }
 
 .lyric-progress {
