@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
 import {
   findActiveLyricLine,
   parseLrc,
@@ -61,10 +60,11 @@ const connectionStatus = ref<BridgeConnectionStatus>({
   lastMessageAt: null
 });
 const configDirectoryStatus = ref<ConfigDirectoryStatus>({
-  directory: null,
+  directory: "https://karlblue.github.io/lyricbridge-bindings/",
   bindingCount: 0,
   error: null
 });
+const bindingSourceUrl = ref("https://karlblue.github.io/lyricbridge-bindings/");
 const latestState = ref<PlayerState | null>(null);
 const latestError = ref<string | null>(null);
 const bindingError = ref<string | null>(null);
@@ -259,6 +259,7 @@ onMounted(async () => {
   serverStatus.value = await invoke<BridgeServerStatus>("get_bridge_server_status");
   connectionStatus.value = await invoke<BridgeConnectionStatus>("get_bridge_connection_status");
   configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("get_config_directory_status");
+  bindingSourceUrl.value = configDirectoryStatus.value.directory || bindingSourceUrl.value;
   overlaySettings.value = await invoke<OverlaySettings>("get_overlay_settings");
 
   await listen<BridgeMessage>("bridge-message", (event) => {
@@ -323,43 +324,87 @@ async function loadBinding(videoId: string) {
   }
 }
 
-async function chooseConfigDirectory() {
-  const selected = await open({
-    directory: true,
-    multiple: false
-  });
+async function syncRemoteBindings() {
+  bindingError.value = null;
 
-  if (typeof selected === "string") {
-    configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("set_config_directory", {
-      directory: selected
+  try {
+    configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("sync_remote_bindings", {
+      sourceUrl: bindingSourceUrl.value
     });
+    bindingSourceUrl.value = configDirectoryStatus.value.directory || bindingSourceUrl.value;
 
     await reloadCurrentVideoBinding();
     await notifyConfigDirectoryChanged();
+  } catch (error) {
+    bindingError.value = String(error);
   }
 }
 
 async function reloadConfigDirectory() {
-  configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("get_config_directory_status");
+  bindingError.value = null;
 
-  await reloadCurrentVideoBinding();
-  await notifyConfigDirectoryChanged();
+  try {
+    configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("get_config_directory_status");
+    bindingSourceUrl.value = configDirectoryStatus.value.directory || bindingSourceUrl.value;
+
+    await reloadCurrentVideoBinding();
+    await notifyConfigDirectoryChanged();
+  } catch (error) {
+    bindingError.value = String(error);
+  }
 }
 
-async function clearConfigDirectory() {
-  configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("set_config_directory", {
-    directory: null
-  });
+async function updateCurrentLyric() {
+  const videoId = latestState.value?.videoId;
+  if (!videoId) {
+    bindingError.value = "未检测到当前视频，无法更新歌词。";
+    return;
+  }
 
-  await reloadCurrentVideoBinding();
-  await notifyConfigDirectoryChanged();
+  try {
+    bindingError.value = null;
+    const binding = await invoke<LyricBindingWithContent | null>("update_lyric_binding", {
+      videoId
+    });
+
+    if (binding) {
+      applyBinding(binding);
+    } else {
+      activeBinding.value = null;
+      offsetMs.value = 0;
+    }
+
+    await notifyConfigDirectoryChanged();
+  } catch (error) {
+    bindingError.value = String(error);
+  }
 }
 
 async function reloadCurrentVideoBinding() {
   const videoId = latestState.value?.videoId;
   if (videoId) {
     loadedVideoId.value = null;
-    await loadBinding(videoId);
+    await loadLocalBinding(videoId);
+  }
+}
+
+async function loadLocalBinding(videoId: string) {
+  bindingError.value = null;
+  activeBinding.value = null;
+  offsetMs.value = 0;
+
+  try {
+    const binding = await invoke<LyricBindingWithContent | null>("get_local_lyric_binding", {
+      videoId
+    });
+
+    if (!binding) {
+      return;
+    }
+
+    applyBinding(binding);
+  } catch (error) {
+    bindingError.value = String(error);
   }
 }
 
@@ -545,21 +590,24 @@ function formatLastUpdate(value: number | null): string {
 
         <section class="surface">
           <div class="section-heading">
-            <span class="eyebrow">配置目录</span>
+            <span class="eyebrow">绑定源</span>
             <span class="binding-count">{{ configDirectoryStatus.bindingCount }} 个绑定</span>
           </div>
-          <p class="path-display">
-            {{ configDirectoryStatus.directory || "未选择配置目录" }}
-          </p>
+          <input
+            v-model="bindingSourceUrl"
+            class="path-display source-input"
+            type="url"
+            spellcheck="false"
+          />
           <div class="config-actions">
-            <button class="secondary-button" type="button" @click="chooseConfigDirectory">
-              浏览
+            <button class="secondary-button" type="button" @click="syncRemoteBindings">
+              同步绑定
+            </button>
+            <button class="secondary-button" type="button" @click="updateCurrentLyric">
+              更新歌词
             </button>
             <button class="secondary-button" type="button" @click="reloadConfigDirectory">
-              重载
-            </button>
-            <button class="secondary-button" type="button" @click="clearConfigDirectory">
-              清除
+              本地重载
             </button>
           </div>
           <!-- <p v-if="activeBinding" class="hint compact">
@@ -988,6 +1036,16 @@ button:disabled {
   border: 1px solid rgba(148, 163, 184, 0.28);
   border-radius: 10px;
   box-sizing: border-box;
+}
+
+.source-input {
+  width: 100%;
+  outline: none;
+}
+
+.source-input:focus {
+  border-color: rgba(20, 184, 166, 0.52);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.12);
 }
 
 .hint,

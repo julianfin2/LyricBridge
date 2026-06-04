@@ -2,7 +2,7 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
         Mutex,
@@ -18,6 +18,7 @@ use tokio::net::TcpListener;
 use tokio_tungstenite::accept_async;
 
 const BRIDGE_ADDR: &str = "127.0.0.1:32190";
+const DEFAULT_BINDING_SOURCE_URL: &str = "https://karlblue.github.io/lyricbridge-bindings/";
 const TRAY_SHOW_MAIN_ID: &str = "show-main";
 const TRAY_TOGGLE_LYRICS_ID: &str = "toggle-lyrics";
 const TRAY_EXIT_ID: &str = "exit";
@@ -160,26 +161,35 @@ fn get_overlay_settings(app: tauri::AppHandle) -> Result<OverlaySettings, String
 }
 
 #[tauri::command]
-fn get_config_directory_status(app: tauri::AppHandle) -> ConfigDirectoryStatus {
-    config_directory_status(&app)
+async fn get_config_directory_status(app: tauri::AppHandle) -> ConfigDirectoryStatus {
+    config_directory_status(&app).await
 }
 
 #[tauri::command]
-fn set_config_directory(
+async fn set_config_directory(
     app: tauri::AppHandle,
     directory: Option<String>,
 ) -> Result<ConfigDirectoryStatus, String> {
-    let directory = directory.and_then(|value| {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
-    });
+    let directory = Some(normalize_binding_source_url(directory));
 
     write_config_directory_settings(&app, &ConfigDirectorySettings { directory })?;
-    Ok(config_directory_status(&app))
+    Ok(config_directory_status(&app).await)
+}
+
+#[tauri::command]
+async fn sync_remote_bindings(
+    app: tauri::AppHandle,
+    source_url: Option<String>,
+) -> Result<ConfigDirectoryStatus, String> {
+    let source_url = normalize_binding_source_url(source_url);
+    write_config_directory_settings(
+        &app,
+        &ConfigDirectorySettings {
+            directory: Some(source_url.clone()),
+        },
+    )?;
+    download_bindings_file(&app, &source_url).await?;
+    Ok(config_directory_status(&app).await)
 }
 
 #[tauri::command]
@@ -237,11 +247,27 @@ fn start_overlay_drag(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn get_lyric_binding(
+async fn get_lyric_binding(
     app: tauri::AppHandle,
     video_id: String,
 ) -> Result<Option<LyricBindingWithContent>, String> {
-    read_external_lyric_binding(&app, &video_id)
+    read_external_lyric_binding(&app, &video_id, LyricLoadMode::DownloadMissing).await
+}
+
+#[tauri::command]
+async fn get_local_lyric_binding(
+    app: tauri::AppHandle,
+    video_id: String,
+) -> Result<Option<LyricBindingWithContent>, String> {
+    read_local_external_lyric_binding(&app, &video_id).await
+}
+
+#[tauri::command]
+async fn update_lyric_binding(
+    app: tauri::AppHandle,
+    video_id: String,
+) -> Result<Option<LyricBindingWithContent>, String> {
+    read_external_lyric_binding(&app, &video_id, LyricLoadMode::ForceDownload).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -274,6 +300,7 @@ pub fn run() {
             get_bridge_connection_status,
             get_bridge_server_status,
             get_config_directory_status,
+            get_local_lyric_binding,
             get_overlay_settings,
             reset_overlay_position,
             set_config_directory,
@@ -281,6 +308,8 @@ pub fn run() {
             set_overlay_locked,
             set_overlay_visible,
             start_overlay_drag,
+            sync_remote_bindings,
+            update_lyric_binding,
             get_lyric_binding
         ])
         .run(tauri::generate_context!())
@@ -492,16 +521,18 @@ fn exit_app(app: &tauri::AppHandle) {
     app.exit(0);
 }
 
-fn read_external_lyric_binding(
+enum LyricLoadMode {
+    DownloadMissing,
+    ForceDownload,
+}
+
+async fn read_external_lyric_binding(
     app: &tauri::AppHandle,
     video_id: &str,
+    mode: LyricLoadMode,
 ) -> Result<Option<LyricBindingWithContent>, String> {
-    let Some(config_dir) = read_config_directory_settings(app)?.directory else {
-        return Ok(None);
-    };
-
-    let config_dir = PathBuf::from(config_dir);
-    let store = read_external_bindings_store(&config_dir)?;
+    let source_url = configured_binding_source_url(app)?;
+    let store = read_external_bindings_store_or_sync(app, &source_url).await?;
     let Some(binding) = store
         .bindings
         .into_iter()
@@ -510,9 +541,41 @@ fn read_external_lyric_binding(
         return Ok(None);
     };
 
-    let lyric_path = resolve_config_lyric_path(&config_dir, &binding.lyric_file);
+    let lyric_path = resolve_cached_lyric_path(app, &binding.lyric_file)?;
+
+    if matches!(mode, LyricLoadMode::ForceDownload)
+        || matches!(mode, LyricLoadMode::DownloadMissing) && !lyric_path.exists()
+    {
+        download_lyric_file(app, &source_url, &binding.lyric_file).await?;
+    }
+
+    read_binding_lyric_content(binding, lyric_path)
+}
+
+async fn read_local_external_lyric_binding(
+    app: &tauri::AppHandle,
+    video_id: &str,
+) -> Result<Option<LyricBindingWithContent>, String> {
+    let source_url = configured_binding_source_url(app)?;
+    let store = read_external_bindings_store_or_sync(app, &source_url).await?;
+    let Some(binding) = store
+        .bindings
+        .into_iter()
+        .find(|binding| binding.video_id == video_id)
+    else {
+        return Ok(None);
+    };
+
+    let lyric_path = resolve_cached_lyric_path(app, &binding.lyric_file)?;
+    read_binding_lyric_content(binding, lyric_path)
+}
+
+fn read_binding_lyric_content(
+    binding: ExternalLyricBinding,
+    lyric_path: PathBuf,
+) -> Result<Option<LyricBindingWithContent>, String> {
     let lyric_text = fs::read_to_string(&lyric_path)
-        .map_err(|error| format!("读取配置歌词文件失败：{error}"))?;
+        .map_err(|error| format!("读取本地歌词缓存失败：{error}"))?;
 
     Ok(Some(LyricBindingWithContent {
         video_id: binding.video_id,
@@ -522,23 +585,106 @@ fn read_external_lyric_binding(
     }))
 }
 
-fn read_external_bindings_store(config_dir: &Path) -> Result<ExternalBindingsStore, String> {
-    let path = config_dir.join("bindings.json");
+fn read_external_bindings_store(app: &tauri::AppHandle) -> Result<ExternalBindingsStore, String> {
+    let path = bindings_cache_path(app)?;
     let text = fs::read_to_string(&path)
-        .map_err(|error| format!("读取配置目录 bindings.json 失败：{error}"))?;
-    serde_json::from_str(&text).map_err(|error| format!("解析配置目录 bindings.json 失败：{error}"))
+        .map_err(|error| format!("读取本地 bindings.json 失败，请先同步绑定：{error}"))?;
+    serde_json::from_str(&text).map_err(|error| format!("解析本地 bindings.json 失败：{error}"))
 }
 
-fn resolve_config_lyric_path(config_dir: &Path, lyric_file: &str) -> PathBuf {
-    let path = PathBuf::from(lyric_file);
-    if path.is_absolute() {
-        path
-    } else {
-        config_dir.join(path)
+async fn read_external_bindings_store_or_sync(
+    app: &tauri::AppHandle,
+    source_url: &str,
+) -> Result<ExternalBindingsStore, String> {
+    if !bindings_cache_path(app)?
+        .try_exists()
+        .map_err(|error| format!("检查本地 bindings.json 失败：{error}"))?
+    {
+        download_bindings_file(app, source_url).await?;
     }
+
+    read_external_bindings_store(app)
 }
 
-fn config_directory_status(app: &tauri::AppHandle) -> ConfigDirectoryStatus {
+async fn download_bindings_file(app: &tauri::AppHandle, source_url: &str) -> Result<(), String> {
+    let url = join_remote_path(source_url, "bindings.json")?;
+    let text = download_text(url.as_str()).await?;
+    serde_json::from_str::<ExternalBindingsStore>(&text)
+        .map_err(|error| format!("远程 bindings.json 格式无效：{error}"))?;
+
+    let path = bindings_cache_path(app)?;
+    write_cached_text(&path, &text, "写入 bindings.json 缓存失败")
+}
+
+async fn download_lyric_file(
+    app: &tauri::AppHandle,
+    source_url: &str,
+    lyric_file: &str,
+) -> Result<(), String> {
+    let url = join_remote_path(source_url, lyric_file)?;
+    let text = download_text(url.as_str()).await?;
+    let path = resolve_cached_lyric_path(app, lyric_file)?;
+    write_cached_text(&path, &text, "写入歌词缓存失败")
+}
+
+async fn download_text(url: &str) -> Result<String, String> {
+    let response = reqwest::get(url)
+        .await
+        .map_err(|error| format!("下载 {url} 失败：{error}"))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("下载 {url} 失败：HTTP {status}"));
+    }
+
+    response
+        .text()
+        .await
+        .map_err(|error| format!("读取 {url} 响应失败：{error}"))
+}
+
+fn write_cached_text(path: &Path, text: &str, message: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("创建缓存目录失败：{error}"))?;
+    }
+
+    fs::write(path, text).map_err(|error| format!("{message}：{error}"))
+}
+
+fn join_remote_path(source_url: &str, path: &str) -> Result<reqwest::Url, String> {
+    let base = ensure_trailing_slash(source_url);
+    let url = reqwest::Url::parse(&base).map_err(|error| format!("绑定源网址无效：{error}"))?;
+    url.join(path)
+        .map_err(|error| format!("拼接远程文件网址失败：{error}"))
+}
+
+fn resolve_cached_lyric_path(app: &tauri::AppHandle, lyric_file: &str) -> Result<PathBuf, String> {
+    Ok(bindings_cache_dir(app)?.join(safe_relative_path(lyric_file)?))
+}
+
+fn safe_relative_path(path: &str) -> Result<PathBuf, String> {
+    let path = Path::new(path);
+    if path.is_absolute() {
+        return Err("lyricFile 不能是绝对路径".to_string());
+    }
+
+    let mut safe_path = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => safe_path.push(value),
+            Component::CurDir => {}
+            _ => return Err("lyricFile 只能使用缓存目录内的相对路径".to_string()),
+        }
+    }
+
+    if safe_path.as_os_str().is_empty() {
+        return Err("lyricFile 不能为空".to_string());
+    }
+
+    Ok(safe_path)
+}
+
+async fn config_directory_status(app: &tauri::AppHandle) -> ConfigDirectoryStatus {
     let settings = match read_config_directory_settings(app) {
         Ok(settings) => settings,
         Err(error) => {
@@ -550,22 +696,17 @@ fn config_directory_status(app: &tauri::AppHandle) -> ConfigDirectoryStatus {
         }
     };
 
-    let Some(directory) = settings.directory.clone() else {
-        return ConfigDirectoryStatus {
-            directory: None,
-            binding_count: 0,
-            error: None,
-        };
-    };
+    let source_url = settings.directory.unwrap_or_else(default_binding_source_url);
+    let directory = Some(source_url.clone());
 
-    match read_external_bindings_store(Path::new(&directory)) {
+    match read_external_bindings_store_or_sync(app, &source_url).await {
         Ok(store) => ConfigDirectoryStatus {
-            directory: Some(directory),
+            directory,
             binding_count: store.bindings.len(),
             error: None,
         },
         Err(error) => ConfigDirectoryStatus {
-            directory: Some(directory),
+            directory,
             binding_count: 0,
             error: Some(error),
         },
@@ -578,12 +719,39 @@ fn read_config_directory_settings(
     let path = config_directory_settings_path(app)?;
 
     if !path.exists() {
-        return Ok(ConfigDirectorySettings { directory: None });
+        return Ok(ConfigDirectorySettings {
+            directory: Some(default_binding_source_url()),
+        });
     }
 
     let text =
         fs::read_to_string(&path).map_err(|error| format!("读取配置目录设置失败：{error}"))?;
     serde_json::from_str(&text).map_err(|error| format!("解析配置目录设置失败：{error}"))
+}
+
+fn configured_binding_source_url(app: &tauri::AppHandle) -> Result<String, String> {
+    Ok(read_config_directory_settings(app)?
+        .directory
+        .unwrap_or_else(default_binding_source_url))
+}
+
+fn normalize_binding_source_url(value: Option<String>) -> String {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(default_binding_source_url)
+}
+
+fn default_binding_source_url() -> String {
+    DEFAULT_BINDING_SOURCE_URL.to_string()
+}
+
+fn ensure_trailing_slash(value: &str) -> String {
+    if value.ends_with('/') {
+        value.to_string()
+    } else {
+        format!("{value}/")
+    }
 }
 
 fn write_config_directory_settings(
@@ -606,6 +774,17 @@ fn config_directory_settings_path(app: &tauri::AppHandle) -> Result<PathBuf, Str
         .app_data_dir()
         .map(|dir| dir.join("config-directory.json"))
         .map_err(|error| format!("解析应用数据目录失败：{error}"))
+}
+
+fn bindings_cache_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join("bindings-cache"))
+        .map_err(|error| format!("解析应用数据目录失败：{error}"))
+}
+
+fn bindings_cache_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(bindings_cache_dir(app)?.join("bindings.json"))
 }
 
 fn read_overlay_settings(app: &tauri::AppHandle) -> Result<OverlaySettings, String> {
