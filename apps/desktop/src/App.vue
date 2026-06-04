@@ -27,6 +27,16 @@ type LyricBindingWithContent = LyricBinding & {
   lyricText: string;
 };
 
+type OverlaySettings = {
+  locked: boolean;
+  visible: boolean;
+  alwaysOnTop: boolean;
+  x: number | null;
+  y: number | null;
+  width: number;
+  height: number;
+};
+
 const serverStatus = ref<BridgeServerStatus>({
   address: "127.0.0.1:32190",
   running: false,
@@ -40,6 +50,15 @@ const loadedVideoId = ref<string | null>(null);
 const lyricFilePath = ref("");
 const offsetMs = ref(0);
 const saving = ref(false);
+const overlaySettings = ref<OverlaySettings>({
+  locked: false,
+  visible: true,
+  alwaysOnTop: true,
+  x: null,
+  y: null,
+  width: 1000,
+  height: 150
+});
 const isLyricsWindow = new URLSearchParams(window.location.search).get("window") === "lyrics";
 
 if (isLyricsWindow) {
@@ -112,6 +131,7 @@ onMounted(async () => {
   });
 
   serverStatus.value = await invoke<BridgeServerStatus>("get_bridge_server_status");
+  overlaySettings.value = await invoke<OverlaySettings>("get_overlay_settings");
 
   await listen<BridgeMessage>("bridge-message", (event) => {
     if (event.payload.type === "player-state") {
@@ -205,6 +225,32 @@ async function chooseLyricFile() {
   }
 }
 
+async function setOverlayVisible(visible: boolean) {
+  overlaySettings.value = await invoke<OverlaySettings>("set_overlay_visible", { visible });
+}
+
+async function setOverlayLocked(locked: boolean) {
+  overlaySettings.value = await invoke<OverlaySettings>("set_overlay_locked", { locked });
+}
+
+async function setOverlayAlwaysOnTop(alwaysOnTop: boolean) {
+  overlaySettings.value = await invoke<OverlaySettings>("set_overlay_always_on_top", {
+    alwaysOnTop
+  });
+}
+
+async function resetOverlay() {
+  overlaySettings.value = await invoke<OverlaySettings>("reset_overlay_position");
+}
+
+async function startOverlayDrag(event: MouseEvent) {
+  if (!isLyricsWindow || overlaySettings.value.locked || event.button !== 0) {
+    return;
+  }
+
+  await invoke("start_overlay_drag");
+}
+
 function applyBinding(binding: LyricBindingWithContent) {
   activeBinding.value = binding;
   lyricFilePath.value = binding.lyricFilePath;
@@ -225,7 +271,7 @@ function formatTime(value: number | null): string {
 
 <template>
   <main v-if="isLyricsWindow" class="lyrics-window">
-    <section class="floating-lyrics">
+    <section class="floating-lyrics" @mousedown="startOverlayDrag">
       <p class="floating-current">{{ currentLyric?.text || "LyricBridge" }}</p>
       <p class="floating-next">{{ nextLyric?.text || "Waiting for bound YouTube lyrics" }}</p>
     </section>
@@ -271,6 +317,37 @@ function formatTime(value: number | null): string {
         <span class="eyebrow">Lyrics</span>
         <p class="current-line">{{ currentLyric?.text || "No lyric line active" }}</p>
         <p class="next-line">{{ nextLyric?.text || "Bind an LRC file for this video" }}</p>
+      </section>
+
+      <section class="overlay-controls">
+        <span class="eyebrow">Overlay window</span>
+        <div class="control-row">
+          <button
+            class="secondary-button"
+            type="button"
+            @click="setOverlayVisible(!overlaySettings.visible)"
+          >
+            {{ overlaySettings.visible ? "Hide" : "Show" }}
+          </button>
+          <button
+            class="secondary-button"
+            type="button"
+            @click="setOverlayLocked(!overlaySettings.locked)"
+          >
+            {{ overlaySettings.locked ? "Unlock" : "Lock" }}
+          </button>
+          <button
+            class="secondary-button"
+            type="button"
+            @click="setOverlayAlwaysOnTop(!overlaySettings.alwaysOnTop)"
+          >
+            {{ overlaySettings.alwaysOnTop ? "Disable top" : "Always top" }}
+          </button>
+          <button class="secondary-button" type="button" @click="resetOverlay">Reset</button>
+        </div>
+        <p class="hint compact">
+          {{ overlaySettings.locked ? "Locked: mouse clicks pass through lyrics." : "Unlocked: drag the lyrics window to move it." }}
+        </p>
       </section>
 
       <form class="binding-form" @submit.prevent="saveBinding">
@@ -392,7 +469,8 @@ header p {
 }
 
 .now-playing,
-.lyrics {
+.lyrics,
+.overlay-controls {
   display: grid;
   gap: 6px;
   padding: 18px;
@@ -434,6 +512,16 @@ dd {
 
 .lyrics {
   margin-bottom: 18px;
+}
+
+.overlay-controls {
+  margin-bottom: 18px;
+}
+
+.control-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .current-line {
@@ -520,13 +608,18 @@ button:disabled {
   color: #52606d;
 }
 
+.compact {
+  margin-top: 4px;
+}
+
 .error {
   color: #b42318;
 }
 
 @media (max-width: 680px) {
   .metrics,
-  .binding-form {
+  .binding-form,
+  .control-row {
     grid-template-columns: 1fr;
   }
 }
@@ -544,6 +637,7 @@ button:disabled {
 .floating-lyrics {
   display: grid;
   gap: 6px;
+  cursor: move;
   text-align: center;
 }
 

@@ -1,7 +1,9 @@
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, path::PathBuf, sync::Mutex};
-use tauri::{Emitter, Manager};
+use tauri::{
+    Emitter, Manager, PhysicalPosition, PhysicalSize, Position, Size, WebviewWindow, WindowEvent,
+};
 use tokio::net::TcpListener;
 use tokio_tungstenite::accept_async;
 
@@ -16,6 +18,7 @@ struct BridgeServerStatus {
 
 struct BridgeState {
     server_status: Mutex<BridgeServerStatus>,
+    saving_overlay_settings: Mutex<bool>,
 }
 
 impl BridgeServerStatus {
@@ -53,6 +56,32 @@ struct LyricBindingWithContent {
     lyric_text: String,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OverlaySettings {
+    locked: bool,
+    visible: bool,
+    always_on_top: bool,
+    x: Option<i32>,
+    y: Option<i32>,
+    width: u32,
+    height: u32,
+}
+
+impl Default for OverlaySettings {
+    fn default() -> Self {
+        Self {
+            locked: false,
+            visible: true,
+            always_on_top: true,
+            x: None,
+            y: None,
+            width: 1000,
+            height: 150,
+        }
+    }
+}
+
 #[derive(Default, Deserialize, Serialize)]
 struct BindingsStore {
     bindings: BTreeMap<String, LyricBinding>,
@@ -67,6 +96,61 @@ fn get_bridge_server_status(
         .lock()
         .map(|status| status.clone())
         .map_err(|error| format!("Failed to read bridge server status: {error}"))
+}
+
+#[tauri::command]
+fn get_overlay_settings(app: tauri::AppHandle) -> Result<OverlaySettings, String> {
+    read_overlay_settings(&app)
+}
+
+#[tauri::command]
+fn set_overlay_visible(app: tauri::AppHandle, visible: bool) -> Result<OverlaySettings, String> {
+    let mut settings = read_overlay_settings(&app)?;
+    settings.visible = visible;
+    write_overlay_settings(&app, &settings)?;
+    apply_overlay_settings(&app, &settings)?;
+    Ok(settings)
+}
+
+#[tauri::command]
+fn set_overlay_locked(app: tauri::AppHandle, locked: bool) -> Result<OverlaySettings, String> {
+    let mut settings = read_overlay_settings(&app)?;
+    settings.locked = locked;
+    write_overlay_settings(&app, &settings)?;
+    apply_overlay_settings(&app, &settings)?;
+    Ok(settings)
+}
+
+#[tauri::command]
+fn set_overlay_always_on_top(
+    app: tauri::AppHandle,
+    always_on_top: bool,
+) -> Result<OverlaySettings, String> {
+    let mut settings = read_overlay_settings(&app)?;
+    settings.always_on_top = always_on_top;
+    write_overlay_settings(&app, &settings)?;
+    apply_overlay_settings(&app, &settings)?;
+    Ok(settings)
+}
+
+#[tauri::command]
+fn reset_overlay_position(app: tauri::AppHandle) -> Result<OverlaySettings, String> {
+    let mut settings = read_overlay_settings(&app)?;
+    settings.x = None;
+    settings.y = None;
+    settings.width = 1000;
+    settings.height = 150;
+    write_overlay_settings(&app, &settings)?;
+    apply_overlay_settings(&app, &settings)?;
+    Ok(settings)
+}
+
+#[tauri::command]
+fn start_overlay_drag(app: tauri::AppHandle) -> Result<(), String> {
+    let window = lyrics_window(&app)?;
+    window
+        .start_dragging()
+        .map_err(|error| format!("Failed to start dragging overlay: {error}"))
 }
 
 #[tauri::command]
@@ -104,6 +188,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(BridgeState {
             server_status: Mutex::new(BridgeServerStatus::offline(None)),
+            saving_overlay_settings: Mutex::new(false),
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -114,10 +199,20 @@ pub fn run() {
                 run_bridge_server(handle).await;
             });
 
+            let settings = read_overlay_settings(app.handle())?;
+            apply_overlay_settings(app.handle(), &settings)?;
+            register_overlay_window_events(app.handle())?;
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_bridge_server_status,
+            get_overlay_settings,
+            reset_overlay_position,
+            set_overlay_always_on_top,
+            set_overlay_locked,
+            set_overlay_visible,
+            start_overlay_drag,
             get_lyric_binding,
             save_lyric_binding
         ])
@@ -221,4 +316,159 @@ fn bindings_store_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .app_data_dir()
         .map(|dir| dir.join("bindings.json"))
         .map_err(|error| format!("Failed to resolve app data directory: {error}"))
+}
+
+fn read_overlay_settings(app: &tauri::AppHandle) -> Result<OverlaySettings, String> {
+    let path = overlay_settings_path(app)?;
+
+    if !path.exists() {
+        return Ok(OverlaySettings::default());
+    }
+
+    let text = fs::read_to_string(&path)
+        .map_err(|error| format!("Failed to read overlay settings: {error}"))?;
+    serde_json::from_str(&text)
+        .map_err(|error| format!("Failed to parse overlay settings: {error}"))
+}
+
+fn write_overlay_settings(
+    app: &tauri::AppHandle,
+    settings: &OverlaySettings,
+) -> Result<(), String> {
+    let path = overlay_settings_path(app)?;
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create app data directory: {error}"))?;
+    }
+
+    let text = serde_json::to_string_pretty(settings)
+        .map_err(|error| format!("Failed to serialize overlay settings: {error}"))?;
+    fs::write(path, text).map_err(|error| format!("Failed to write overlay settings: {error}"))
+}
+
+fn overlay_settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join("overlay.json"))
+        .map_err(|error| format!("Failed to resolve app data directory: {error}"))
+}
+
+fn apply_overlay_settings(
+    app: &tauri::AppHandle,
+    settings: &OverlaySettings,
+) -> Result<(), String> {
+    let window = lyrics_window(app)?;
+    let state = app.state::<BridgeState>();
+    let _guard = OverlaySaveGuard::new(&state);
+
+    window
+        .set_size(Size::Physical(PhysicalSize::new(
+            settings.width,
+            settings.height,
+        )))
+        .map_err(|error| format!("Failed to size overlay window: {error}"))?;
+
+    if let (Some(x), Some(y)) = (settings.x, settings.y) {
+        window
+            .set_position(Position::Physical(PhysicalPosition::new(x, y)))
+            .map_err(|error| format!("Failed to position overlay window: {error}"))?;
+    } else {
+        window
+            .center()
+            .map_err(|error| format!("Failed to center overlay window: {error}"))?;
+    }
+
+    window
+        .set_always_on_top(settings.always_on_top)
+        .map_err(|error| format!("Failed to update overlay always-on-top: {error}"))?;
+    window
+        .set_ignore_cursor_events(settings.locked)
+        .map_err(|error| format!("Failed to update overlay click-through: {error}"))?;
+
+    if settings.visible {
+        window
+            .show()
+            .map_err(|error| format!("Failed to show overlay window: {error}"))?;
+    } else {
+        window
+            .hide()
+            .map_err(|error| format!("Failed to hide overlay window: {error}"))?;
+    }
+
+    Ok(())
+}
+
+fn register_overlay_window_events(app: &tauri::AppHandle) -> Result<(), String> {
+    let window = lyrics_window(app)?;
+    let app = app.clone();
+
+    window.on_window_event(move |event| match event {
+        WindowEvent::Moved(position) => {
+            let _ = update_overlay_geometry(&app, Some(*position), None);
+        }
+        WindowEvent::Resized(size) => {
+            let _ = update_overlay_geometry(&app, None, Some(*size));
+        }
+        _ => {}
+    });
+
+    Ok(())
+}
+
+fn update_overlay_geometry(
+    app: &tauri::AppHandle,
+    position: Option<PhysicalPosition<i32>>,
+    size: Option<PhysicalSize<u32>>,
+) -> Result<(), String> {
+    if app
+        .state::<BridgeState>()
+        .saving_overlay_settings
+        .lock()
+        .map(|saving| *saving)
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
+
+    let mut settings = read_overlay_settings(app)?;
+
+    if let Some(position) = position {
+        settings.x = Some(position.x);
+        settings.y = Some(position.y);
+    }
+
+    if let Some(size) = size {
+        settings.width = size.width;
+        settings.height = size.height;
+    }
+
+    write_overlay_settings(app, &settings)
+}
+
+fn lyrics_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
+    app.get_webview_window("lyrics")
+        .ok_or_else(|| "Lyrics window is not available".to_string())
+}
+
+struct OverlaySaveGuard<'a> {
+    state: &'a BridgeState,
+}
+
+impl<'a> OverlaySaveGuard<'a> {
+    fn new(state: &'a BridgeState) -> Self {
+        if let Ok(mut saving) = state.saving_overlay_settings.lock() {
+            *saving = true;
+        }
+
+        Self { state }
+    }
+}
+
+impl Drop for OverlaySaveGuard<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut saving) = self.state.saving_overlay_settings.lock() {
+            *saving = false;
+        }
+    }
 }
