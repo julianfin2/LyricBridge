@@ -458,6 +458,12 @@ body {
   margin: 0;
 }
 
+html,
+body,
+#app {
+  height: 100%;
+}
+
 html.lyrics-root,
 html.lyrics-root body,
 html.lyrics-root #app {
@@ -470,20 +476,21 @@ input {
 }
 
 .shell {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 32px;
+  height: 100vh;
+  overflow: auto;
+  padding: 0;
   box-sizing: border-box;
 }
 
 .panel {
-  width: min(780px, 100%);
+  width: 100%;
+  min-height: 100%;
   background: #ffffff;
-  border: 1px solid #d9e0e8;
-  border-radius: 8px;
-  padding: 28px;
-  box-shadow: 0 18px 50px rgba(23, 31, 42, 0.12);
+  border: 0;
+  border-radius: 0;
+  padding: 24px;
+  box-shadow: none;
+  box-sizing: border-box;
 }
 
 .status-row {
