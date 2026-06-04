@@ -192,11 +192,6 @@ function acceptPlayerState(nextState: PlayerState) {
     return;
   }
 
-  if (currentState.paused) {
-    latestState.value = nextState;
-    return;
-  }
-
   if (nextState.videoId === currentState.videoId) {
     latestState.value = nextState;
   }
