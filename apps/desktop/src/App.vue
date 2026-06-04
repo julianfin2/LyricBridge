@@ -44,6 +44,16 @@ type OverlaySettings = {
   height: number;
 };
 
+type OverlayStyleSettings = {
+  currentFontSize: number;
+  nextFontSize: number;
+  currentColor: string;
+  nextColor: string;
+  shadowColor: string;
+  shadowOpacity: number;
+  fontWeight: number;
+};
+
 type ConfigDirectoryChangedEvent = {
   source: "main" | "lyrics";
   updatedAt: number;
@@ -79,6 +89,15 @@ const overlaySettings = ref<OverlaySettings>({
   y: null,
   width: 1000,
   height: 150
+});
+const overlayStyleSettings = ref<OverlayStyleSettings>({
+  currentFontSize: 42,
+  nextFontSize: 24,
+  currentColor: "#f8fafc",
+  nextColor: "#f8fafc",
+  shadowColor: "#000000",
+  shadowOpacity: 0.9,
+  fontWeight: 900
 });
 const isLyricsWindow = new URLSearchParams(window.location.search).get("window") === "lyrics";
 const windowSource = isLyricsWindow ? "lyrics" : "main";
@@ -205,6 +224,22 @@ const playbackProgressPercent = computed(() => {
   return Math.min(100, Math.max(0, percent));
 });
 
+const overlayStyleVars = computed(() => ({
+  "--floating-current-size": `${overlayStyleSettings.value.currentFontSize}px`,
+  "--floating-next-size": `${overlayStyleSettings.value.nextFontSize}px`,
+  "--floating-current-color": overlayStyleSettings.value.currentColor,
+  "--floating-next-color": hexToRgba(
+    overlayStyleSettings.value.nextColor,
+    Math.min(1, overlayStyleSettings.value.shadowOpacity + 0.02)
+  ),
+  "--floating-shadow-color": hexToRgba(
+    overlayStyleSettings.value.shadowColor,
+    overlayStyleSettings.value.shadowOpacity
+  ),
+  "--floating-font-weight": String(overlayStyleSettings.value.fontWeight),
+  "--floating-next-font-weight": String(Math.min(overlayStyleSettings.value.fontWeight, 750))
+}));
+
 const extensionStatusLabel = computed(() => {
   if (connectionStatus.value.connectedClients <= 0) {
     return "未连接";
@@ -250,6 +285,10 @@ onMounted(async () => {
     overlaySettings.value = event.payload;
   });
 
+  await listen<OverlayStyleSettings>("overlay-style-settings-changed", (event) => {
+    overlayStyleSettings.value = event.payload;
+  });
+
   await listen<ConfigDirectoryChangedEvent>(CONFIG_DIRECTORY_CHANGED_EVENT, async (event) => {
     if (event.payload.source === windowSource) {
       return;
@@ -264,6 +303,7 @@ onMounted(async () => {
   configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("get_config_directory_status");
   bindingSourceUrl.value = configDirectoryStatus.value.directory || bindingSourceUrl.value;
   overlaySettings.value = await invoke<OverlaySettings>("get_overlay_settings");
+  overlayStyleSettings.value = await invoke<OverlayStyleSettings>("get_overlay_style_settings");
 
   await listen<BridgeMessage>("bridge-message", (event) => {
     if (event.payload.type === "player-state") {
@@ -436,6 +476,16 @@ async function resetOverlay() {
   overlaySettings.value = await invoke<OverlaySettings>("reset_overlay_position");
 }
 
+async function updateOverlayStyle() {
+  overlayStyleSettings.value = await invoke<OverlayStyleSettings>("set_overlay_style_settings", {
+    settings: overlayStyleSettings.value
+  });
+}
+
+async function resetOverlayStyle() {
+  overlayStyleSettings.value = await invoke<OverlayStyleSettings>("reset_overlay_style_settings");
+}
+
 async function startOverlayDrag(event: MouseEvent) {
   if (!isLyricsWindow || event.button !== 0) {
     return;
@@ -473,6 +523,14 @@ function formatLastUpdate(value: number | null): string {
     second: "2-digit"
   });
 }
+
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#000000";
+  const red = Number.parseInt(normalized.slice(1, 3), 16);
+  const green = Number.parseInt(normalized.slice(3, 5), 16);
+  const blue = Number.parseInt(normalized.slice(5, 7), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha.toFixed(2)})`;
+}
 </script>
 
 <template>
@@ -480,6 +538,7 @@ function formatLastUpdate(value: number | null): string {
     v-if="isLyricsWindow"
     class="lyrics-window"
     :class="{ locked: overlaySettings.locked }"
+    :style="overlayStyleVars"
     @mousedown="startOverlayDrag"
   >
     <section class="floating-lyrics">
@@ -589,6 +648,85 @@ function formatLastUpdate(value: number | null): string {
           <p class="hint compact">
             {{ overlaySettings.locked ? "已锁定：鼠标点击会穿透歌词窗口。" : "未锁定：拖动歌词窗口可移动位置。" }}
           </p>
+        </section>
+
+        <section class="surface">
+          <div class="section-heading">
+            <span class="eyebrow">歌词样式</span>
+            <button class="link-button" type="button" @click="resetOverlayStyle">重置</button>
+          </div>
+          <div class="style-controls">
+            <label class="range-control">
+              <span>当前句字号</span>
+              <input
+                v-model.number="overlayStyleSettings.currentFontSize"
+                type="range"
+                min="24"
+                max="72"
+                @input="updateOverlayStyle"
+              />
+              <strong>{{ overlayStyleSettings.currentFontSize }}px</strong>
+            </label>
+            <label class="range-control">
+              <span>下一句字号</span>
+              <input
+                v-model.number="overlayStyleSettings.nextFontSize"
+                type="range"
+                min="14"
+                max="48"
+                @input="updateOverlayStyle"
+              />
+              <strong>{{ overlayStyleSettings.nextFontSize }}px</strong>
+            </label>
+            <div class="color-grid">
+              <label>
+                <span>当前句</span>
+                <input
+                  v-model="overlayStyleSettings.currentColor"
+                  type="color"
+                  @input="updateOverlayStyle"
+                />
+              </label>
+              <label>
+                <span>下一句</span>
+                <input
+                  v-model="overlayStyleSettings.nextColor"
+                  type="color"
+                  @input="updateOverlayStyle"
+                />
+              </label>
+              <label>
+                <span>阴影</span>
+                <input
+                  v-model="overlayStyleSettings.shadowColor"
+                  type="color"
+                  @input="updateOverlayStyle"
+                />
+              </label>
+            </div>
+            <label class="range-control">
+              <span>阴影强度</span>
+              <input
+                v-model.number="overlayStyleSettings.shadowOpacity"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                @input="updateOverlayStyle"
+              />
+              <strong>{{ Math.round(overlayStyleSettings.shadowOpacity * 100) }}%</strong>
+            </label>
+            <label class="select-control">
+              <span>字重</span>
+              <select v-model.number="overlayStyleSettings.fontWeight" @change="updateOverlayStyle">
+                <option :value="700">粗</option>
+                <option :value="800">更粗</option>
+                <option :value="900">特粗</option>
+                <option :value="600">半粗</option>
+                <option :value="400">普通</option>
+              </select>
+            </label>
+          </div>
         </section>
 
         <section class="surface">
@@ -1013,6 +1151,22 @@ button:disabled {
   opacity: 0.55;
 }
 
+.link-button {
+  height: auto;
+  padding: 0;
+  color: #0f766e;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: 12px;
+  box-shadow: none;
+}
+
+.link-button:hover {
+  transform: none;
+  box-shadow: none;
+}
+
 .secondary-button {
   color: #172033;
   background: #f8fafc;
@@ -1049,6 +1203,74 @@ button:disabled {
 .source-input:focus {
   border-color: rgba(20, 184, 166, 0.52);
   box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.12);
+}
+
+.style-controls {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.range-control,
+.select-control {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.range-control strong {
+  color: #172033;
+  font-size: 12px;
+  text-align: right;
+}
+
+.range-control input[type="range"] {
+  width: 100%;
+  accent-color: #14b8a6;
+}
+
+.select-control {
+  grid-template-columns: 74px minmax(0, 1fr);
+}
+
+.select-control select {
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  color: #172033;
+  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 9px;
+  font: inherit;
+  font-weight: 700;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.color-grid label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.color-grid input[type="color"] {
+  width: 100%;
+  height: 32px;
+  padding: 3px;
+  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 9px;
 }
 
 .hint,
@@ -1158,26 +1380,26 @@ button:disabled {
   white-space: nowrap;
   text-overflow: ellipsis;
   text-shadow:
-    0 2px 3px rgba(0, 0, 0, 0.85),
-    0 0 2px rgba(0, 0, 0, 0.9),
-    1px 0 0 rgba(0, 0, 0, 0.95),
-    -1px 0 0 rgba(0, 0, 0, 0.95),
-    0 1px 0 rgba(0, 0, 0, 0.95),
-    0 -1px 0 rgba(0, 0, 0, 0.95);
+    0 2px 3px var(--floating-shadow-color),
+    0 0 2px var(--floating-shadow-color),
+    1px 0 0 var(--floating-shadow-color),
+    -1px 0 0 var(--floating-shadow-color),
+    0 1px 0 var(--floating-shadow-color),
+    0 -1px 0 var(--floating-shadow-color);
 }
 
 .floating-current {
   position: relative;
-  color: #f8fafc;
-  font-size: 42px;
-  font-weight: 900;
+  color: var(--floating-current-color);
+  font-size: var(--floating-current-size);
+  font-weight: var(--floating-font-weight);
   line-height: 1.18;
 }
 
 .floating-next {
-  color: rgba(248, 250, 252, 0.82);
-  font-size: 24px;
-  font-weight: 750;
+  color: var(--floating-next-color);
+  font-size: var(--floating-next-size);
+  font-weight: var(--floating-next-font-weight);
   line-height: 1.25;
 }
 </style>

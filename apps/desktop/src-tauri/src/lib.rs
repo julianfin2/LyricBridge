@@ -119,6 +119,18 @@ struct OverlaySettings {
     height: u32,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OverlayStyleSettings {
+    current_font_size: u32,
+    next_font_size: u32,
+    current_color: String,
+    next_color: String,
+    shadow_color: String,
+    shadow_opacity: f32,
+    font_weight: u32,
+}
+
 impl Default for OverlaySettings {
     fn default() -> Self {
         Self {
@@ -129,6 +141,20 @@ impl Default for OverlaySettings {
             y: None,
             width: 1000,
             height: 150,
+        }
+    }
+}
+
+impl Default for OverlayStyleSettings {
+    fn default() -> Self {
+        Self {
+            current_font_size: 42,
+            next_font_size: 24,
+            current_color: "#f8fafc".to_string(),
+            next_color: "#f8fafc".to_string(),
+            shadow_color: "#000000".to_string(),
+            shadow_opacity: 0.9,
+            font_weight: 900,
         }
     }
 }
@@ -158,6 +184,11 @@ fn get_bridge_connection_status(
 #[tauri::command]
 fn get_overlay_settings(app: tauri::AppHandle) -> Result<OverlaySettings, String> {
     read_overlay_settings(&app)
+}
+
+#[tauri::command]
+fn get_overlay_style_settings(app: tauri::AppHandle) -> Result<OverlayStyleSettings, String> {
+    read_overlay_style_settings(&app)
 }
 
 #[tauri::command]
@@ -239,6 +270,25 @@ fn reset_overlay_position(app: tauri::AppHandle) -> Result<OverlaySettings, Stri
 }
 
 #[tauri::command]
+fn set_overlay_style_settings(
+    app: tauri::AppHandle,
+    settings: OverlayStyleSettings,
+) -> Result<OverlayStyleSettings, String> {
+    let settings = sanitize_overlay_style_settings(settings);
+    write_overlay_style_settings(&app, &settings)?;
+    emit_overlay_style_settings_changed(&app, &settings);
+    Ok(settings)
+}
+
+#[tauri::command]
+fn reset_overlay_style_settings(app: tauri::AppHandle) -> Result<OverlayStyleSettings, String> {
+    let settings = OverlayStyleSettings::default();
+    write_overlay_style_settings(&app, &settings)?;
+    emit_overlay_style_settings_changed(&app, &settings);
+    Ok(settings)
+}
+
+#[tauri::command]
 fn start_overlay_drag(app: tauri::AppHandle) -> Result<(), String> {
     let window = lyrics_window(&app)?;
     window
@@ -302,10 +352,13 @@ pub fn run() {
             get_config_directory_status,
             get_local_lyric_binding,
             get_overlay_settings,
+            get_overlay_style_settings,
             reset_overlay_position,
+            reset_overlay_style_settings,
             set_config_directory,
             set_overlay_always_on_top,
             set_overlay_locked,
+            set_overlay_style_settings,
             set_overlay_visible,
             start_overlay_drag,
             sync_remote_bindings,
@@ -799,6 +852,20 @@ fn read_overlay_settings(app: &tauri::AppHandle) -> Result<OverlaySettings, Stri
     serde_json::from_str(&text).map_err(|error| format!("解析桌面歌词窗口设置失败：{error}"))
 }
 
+fn read_overlay_style_settings(app: &tauri::AppHandle) -> Result<OverlayStyleSettings, String> {
+    let path = overlay_style_settings_path(app)?;
+
+    if !path.exists() {
+        return Ok(OverlayStyleSettings::default());
+    }
+
+    let text =
+        fs::read_to_string(&path).map_err(|error| format!("读取桌面歌词样式失败：{error}"))?;
+    let settings = serde_json::from_str(&text)
+        .map_err(|error| format!("解析桌面歌词样式失败：{error}"))?;
+    Ok(sanitize_overlay_style_settings(settings))
+}
+
 fn write_overlay_settings(
     app: &tauri::AppHandle,
     settings: &OverlaySettings,
@@ -814,11 +881,60 @@ fn write_overlay_settings(
     fs::write(path, text).map_err(|error| format!("写入桌面歌词窗口设置失败：{error}"))
 }
 
+fn write_overlay_style_settings(
+    app: &tauri::AppHandle,
+    settings: &OverlayStyleSettings,
+) -> Result<(), String> {
+    let path = overlay_style_settings_path(app)?;
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("创建应用数据目录失败：{error}"))?;
+    }
+
+    let text = serde_json::to_string_pretty(settings)
+        .map_err(|error| format!("序列化桌面歌词样式失败：{error}"))?;
+    fs::write(path, text).map_err(|error| format!("写入桌面歌词样式失败：{error}"))
+}
+
 fn overlay_settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
         .map(|dir| dir.join("overlay.json"))
         .map_err(|error| format!("解析应用数据目录失败：{error}"))
+}
+
+fn overlay_style_settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join("overlay-style.json"))
+        .map_err(|error| format!("解析应用数据目录失败：{error}"))
+}
+
+fn sanitize_overlay_style_settings(settings: OverlayStyleSettings) -> OverlayStyleSettings {
+    OverlayStyleSettings {
+        current_font_size: settings.current_font_size.clamp(24, 72),
+        next_font_size: settings.next_font_size.clamp(14, 48),
+        current_color: sanitize_hex_color(&settings.current_color, "#f8fafc"),
+        next_color: sanitize_hex_color(&settings.next_color, "#f8fafc"),
+        shadow_color: sanitize_hex_color(&settings.shadow_color, "#000000"),
+        shadow_opacity: settings.shadow_opacity.clamp(0.0, 1.0),
+        font_weight: match settings.font_weight {
+            400 | 600 | 700 | 800 | 900 => settings.font_weight,
+            _ => 900,
+        },
+    }
+}
+
+fn sanitize_hex_color(value: &str, fallback: &str) -> String {
+    let value = value.trim();
+    if value.len() == 7
+        && value.starts_with('#')
+        && value.chars().skip(1).all(|character| character.is_ascii_hexdigit())
+    {
+        value.to_string()
+    } else {
+        fallback.to_string()
+    }
 }
 
 fn apply_overlay_settings(
@@ -944,6 +1060,10 @@ fn update_overlay_geometry(
 
 fn emit_overlay_settings_changed(app: &tauri::AppHandle, settings: &OverlaySettings) {
     let _ = app.emit("overlay-settings-changed", settings.clone());
+}
+
+fn emit_overlay_style_settings_changed(app: &tauri::AppHandle, settings: &OverlayStyleSettings) {
+    let _ = app.emit("overlay-style-settings-changed", settings.clone());
 }
 
 fn lyrics_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
