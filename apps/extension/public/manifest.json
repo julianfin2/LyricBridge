@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "LyricBridge for YouTube",
+  "description": "Sends YouTube playback progress to LyricBridge Desktop.",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "LyricBridge",
+    "default_popup": "index.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*", "https://music.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "host_permissions": ["https://www.youtube.com/*", "https://music.youtube.com/*"]
+}

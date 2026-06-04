@@ -1,0 +1,14 @@
+{
+  "name": "lyricbridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:desktop": "pnpm --dir apps/desktop tauri dev",
+    "build:desktop": "pnpm --dir apps/desktop tauri build",
+    "dev:extension": "pnpm --filter @lyricbridge/extension dev",
+    "build:extension": "pnpm --filter @lyricbridge/extension build",
+    "build": "pnpm -r build"
+  },
+  "packageManager": "pnpm@11.5.0"
+}

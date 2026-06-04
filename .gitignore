@@ -1,0 +1,15 @@
+node_modules/
+dist/
+target/
+target-check*/
+
+apps/*/node_modules/
+apps/*/dist/
+apps/*/src-tauri/target/
+apps/*/src-tauri/target-check*/
+
+packages/*/dist/
+
+*.log
+.DS_Store
+Thumbs.db
