@@ -472,6 +472,13 @@ async function setOverlayAlwaysOnTop(alwaysOnTop: boolean) {
   });
 }
 
+async function updateOverlaySize() {
+  overlaySettings.value = await invoke<OverlaySettings>("set_overlay_size", {
+    width: overlaySettings.value.width,
+    height: overlaySettings.value.height
+  });
+}
+
 async function resetOverlay() {
   overlaySettings.value = await invoke<OverlaySettings>("reset_overlay_position");
 }
@@ -645,9 +652,35 @@ function hexToRgba(hex: string, alpha: number): string {
             </button>
             <button class="secondary-button" type="button" @click="resetOverlay">重置</button>
           </div>
-          <p class="hint compact">
+          <!-- <p class="hint compact">
             {{ overlaySettings.locked ? "已锁定：鼠标点击会穿透歌词窗口。" : "未锁定：拖动歌词窗口可移动位置。" }}
-          </p>
+          </p> -->
+          <div class="window-size-controls">
+            <label class="range-control">
+              <span>宽度</span>
+              <input
+                v-model.number="overlaySettings.width"
+                type="range"
+                min="480"
+                max="1600"
+                step="20"
+                @input="updateOverlaySize"
+              />
+              <strong>{{ overlaySettings.width }}px</strong>
+            </label>
+            <label class="range-control">
+              <span>高度</span>
+              <input
+                v-model.number="overlaySettings.height"
+                type="range"
+                min="90"
+                max="320"
+                step="10"
+                @input="updateOverlaySize"
+              />
+              <strong>{{ overlaySettings.height }}px</strong>
+            </label>
+          </div>
         </section>
 
         <section class="surface">
@@ -1206,6 +1239,12 @@ button:disabled {
 }
 
 .style-controls {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.window-size-controls {
   display: grid;
   gap: 10px;
   margin-top: 10px;

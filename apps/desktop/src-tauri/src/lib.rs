@@ -270,6 +270,21 @@ fn reset_overlay_position(app: tauri::AppHandle) -> Result<OverlaySettings, Stri
 }
 
 #[tauri::command]
+fn set_overlay_size(
+    app: tauri::AppHandle,
+    width: u32,
+    height: u32,
+) -> Result<OverlaySettings, String> {
+    let mut settings = read_overlay_settings(&app)?;
+    settings.width = width.clamp(480, 1600);
+    settings.height = height.clamp(90, 320);
+    write_overlay_settings(&app, &settings)?;
+    apply_overlay_settings(&app, &settings)?;
+    emit_overlay_settings_changed(&app, &settings);
+    Ok(settings)
+}
+
+#[tauri::command]
 fn set_overlay_style_settings(
     app: tauri::AppHandle,
     settings: OverlayStyleSettings,
@@ -358,6 +373,7 @@ pub fn run() {
             set_config_directory,
             set_overlay_always_on_top,
             set_overlay_locked,
+            set_overlay_size,
             set_overlay_style_settings,
             set_overlay_visible,
             start_overlay_drag,
