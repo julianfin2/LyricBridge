@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "LyricBridge for YouTube",
-  "description": "Sends YouTube playback progress to LyricBridge Desktop.",
+  "name": "LyricBridge YouTube 歌词桥",
+  "description": "将 YouTube 播放进度发送到 LyricBridge 桌面端。",
   "version": "0.1.0",
   "action": {
     "default_title": "LyricBridge",

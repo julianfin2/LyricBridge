@@ -131,7 +131,7 @@ fn get_bridge_server_status(
         .server_status
         .lock()
         .map(|status| status.clone())
-        .map_err(|error| format!("Failed to read bridge server status: {error}"))
+        .map_err(|error| format!("读取桥接服务状态失败：{error}"))
 }
 
 #[tauri::command]
@@ -142,7 +142,7 @@ fn get_bridge_connection_status(
         .connection_status
         .lock()
         .map(|status| status.clone())
-        .map_err(|error| format!("Failed to read bridge connection status: {error}"))
+        .map_err(|error| format!("读取扩展连接状态失败：{error}"))
 }
 
 #[tauri::command]
@@ -220,7 +220,7 @@ fn start_overlay_drag(app: tauri::AppHandle) -> Result<(), String> {
     let window = lyrics_window(&app)?;
     window
         .start_dragging()
-        .map_err(|error| format!("Failed to start dragging overlay: {error}"))
+        .map_err(|error| format!("开始拖动桌面歌词窗口失败：{error}"))
 }
 
 #[tauri::command]
@@ -392,7 +392,7 @@ fn read_external_lyric_binding(
 
     let lyric_path = resolve_config_lyric_path(&config_dir, &binding.lyric_file);
     let lyric_text = fs::read_to_string(&lyric_path)
-        .map_err(|error| format!("Failed to read config lyric file: {error}"))?;
+        .map_err(|error| format!("读取配置歌词文件失败：{error}"))?;
 
     Ok(Some(LyricBindingWithContent {
         video_id: binding.video_id,
@@ -405,9 +405,9 @@ fn read_external_lyric_binding(
 fn read_external_bindings_store(config_dir: &Path) -> Result<ExternalBindingsStore, String> {
     let path = config_dir.join("bindings.json");
     let text = fs::read_to_string(&path)
-        .map_err(|error| format!("Failed to read config bindings.json: {error}"))?;
+        .map_err(|error| format!("读取配置目录 bindings.json 失败：{error}"))?;
     serde_json::from_str(&text)
-        .map_err(|error| format!("Failed to parse config bindings.json: {error}"))
+        .map_err(|error| format!("解析配置目录 bindings.json 失败：{error}"))
 }
 
 fn resolve_config_lyric_path(config_dir: &Path, lyric_file: &str) -> PathBuf {
@@ -463,9 +463,9 @@ fn read_config_directory_settings(
     }
 
     let text = fs::read_to_string(&path)
-        .map_err(|error| format!("Failed to read config directory settings: {error}"))?;
+        .map_err(|error| format!("读取配置目录设置失败：{error}"))?;
     serde_json::from_str(&text)
-        .map_err(|error| format!("Failed to parse config directory settings: {error}"))
+        .map_err(|error| format!("解析配置目录设置失败：{error}"))
 }
 
 fn write_config_directory_settings(
@@ -476,20 +476,20 @@ fn write_config_directory_settings(
 
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
-            .map_err(|error| format!("Failed to create app data directory: {error}"))?;
+            .map_err(|error| format!("创建应用数据目录失败：{error}"))?;
     }
 
     let text = serde_json::to_string_pretty(settings)
-        .map_err(|error| format!("Failed to serialize config directory settings: {error}"))?;
+        .map_err(|error| format!("序列化配置目录设置失败：{error}"))?;
     fs::write(path, text)
-        .map_err(|error| format!("Failed to write config directory settings: {error}"))
+        .map_err(|error| format!("写入配置目录设置失败：{error}"))
 }
 
 fn config_directory_settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
         .map(|dir| dir.join("config-directory.json"))
-        .map_err(|error| format!("Failed to resolve app data directory: {error}"))
+        .map_err(|error| format!("解析应用数据目录失败：{error}"))
 }
 
 fn read_overlay_settings(app: &tauri::AppHandle) -> Result<OverlaySettings, String> {
@@ -500,9 +500,9 @@ fn read_overlay_settings(app: &tauri::AppHandle) -> Result<OverlaySettings, Stri
     }
 
     let text = fs::read_to_string(&path)
-        .map_err(|error| format!("Failed to read overlay settings: {error}"))?;
+        .map_err(|error| format!("读取桌面歌词窗口设置失败：{error}"))?;
     serde_json::from_str(&text)
-        .map_err(|error| format!("Failed to parse overlay settings: {error}"))
+        .map_err(|error| format!("解析桌面歌词窗口设置失败：{error}"))
 }
 
 fn write_overlay_settings(
@@ -513,19 +513,19 @@ fn write_overlay_settings(
 
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
-            .map_err(|error| format!("Failed to create app data directory: {error}"))?;
+            .map_err(|error| format!("创建应用数据目录失败：{error}"))?;
     }
 
     let text = serde_json::to_string_pretty(settings)
-        .map_err(|error| format!("Failed to serialize overlay settings: {error}"))?;
-    fs::write(path, text).map_err(|error| format!("Failed to write overlay settings: {error}"))
+        .map_err(|error| format!("序列化桌面歌词窗口设置失败：{error}"))?;
+    fs::write(path, text).map_err(|error| format!("写入桌面歌词窗口设置失败：{error}"))
 }
 
 fn overlay_settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
         .map(|dir| dir.join("overlay.json"))
-        .map_err(|error| format!("Failed to resolve app data directory: {error}"))
+        .map_err(|error| format!("解析应用数据目录失败：{error}"))
 }
 
 fn apply_overlay_settings(
@@ -541,7 +541,7 @@ fn apply_overlay_settings(
             settings.width,
             settings.height,
         )))
-        .map_err(|error| format!("Failed to size overlay window: {error}"))?;
+        .map_err(|error| format!("调整桌面歌词窗口大小失败：{error}"))?;
 
     let position = if let (Some(x), Some(y)) = (settings.x, settings.y) {
         PhysicalPosition::new(x, y)
@@ -551,23 +551,23 @@ fn apply_overlay_settings(
 
     window
         .set_position(Position::Physical(position))
-        .map_err(|error| format!("Failed to position overlay window: {error}"))?;
+        .map_err(|error| format!("设置桌面歌词窗口位置失败：{error}"))?;
 
     window
         .set_always_on_top(settings.always_on_top)
-        .map_err(|error| format!("Failed to update overlay always-on-top: {error}"))?;
+        .map_err(|error| format!("更新桌面歌词窗口置顶状态失败：{error}"))?;
     window
         .set_ignore_cursor_events(settings.locked)
-        .map_err(|error| format!("Failed to update overlay click-through: {error}"))?;
+        .map_err(|error| format!("更新桌面歌词窗口鼠标穿透状态失败：{error}"))?;
 
     if settings.visible {
         window
             .show()
-            .map_err(|error| format!("Failed to show overlay window: {error}"))?;
+            .map_err(|error| format!("显示桌面歌词窗口失败：{error}"))?;
     } else {
         window
             .hide()
-            .map_err(|error| format!("Failed to hide overlay window: {error}"))?;
+            .map_err(|error| format!("隐藏桌面歌词窗口失败：{error}"))?;
     }
 
     Ok(())
@@ -596,10 +596,10 @@ fn default_overlay_position(
 ) -> Result<PhysicalPosition<i32>, String> {
     let monitor = window
         .current_monitor()
-        .map_err(|error| format!("Failed to read current monitor: {error}"))?
+        .map_err(|error| format!("读取当前显示器失败：{error}"))?
         .or(window
             .primary_monitor()
-            .map_err(|error| format!("Failed to read primary monitor: {error}"))?);
+            .map_err(|error| format!("读取主显示器失败：{error}"))?);
 
     let Some(monitor) = monitor else {
         return Ok(PhysicalPosition::new(0, 0));

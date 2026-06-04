@@ -90,10 +90,10 @@ const parsedLrc = computed<ParsedLrc | null>(() => {
 
 const videoLabel = computed(() => {
   if (!latestState.value) {
-    return "Waiting for YouTube playback";
+    return "等待 YouTube 播放";
   }
 
-  return latestState.value.title || latestState.value.videoId || "Untitled video";
+  return latestState.value.title || latestState.value.videoId || "未命名视频";
 });
 
 const progressLabel = computed(() => {
@@ -140,10 +140,10 @@ const nextLyric = computed(() => {
 
 const extensionStatusLabel = computed(() => {
   if (connectionStatus.value.connectedClients <= 0) {
-    return "Not connected";
+    return "未连接";
   }
 
-  return `${connectionStatus.value.connectedClients} connected`;
+  return `${connectionStatus.value.connectedClients} 个连接`;
 });
 
 onMounted(async () => {
@@ -301,7 +301,7 @@ function formatTime(value: number | null): string {
 
 function formatLastUpdate(value: number | null): string {
   if (value === null) {
-    return "No updates";
+    return "暂无更新";
   }
 
   return new Date(value).toLocaleTimeString(undefined, {
@@ -321,7 +321,7 @@ function formatLastUpdate(value: number | null): string {
   >
     <section class="floating-lyrics">
       <p class="floating-current">{{ currentLyric?.text || "LyricBridge" }}</p>
-      <p class="floating-next">{{ nextLyric?.text || "Waiting for bound YouTube lyrics" }}</p>
+      <p class="floating-next">{{ nextLyric?.text || "等待已配置的 YouTube 歌词" }}</p>
     </section>
   </main>
 
@@ -330,100 +330,100 @@ function formatLastUpdate(value: number | null): string {
       <div class="status-row">
         <span class="status-dot" :class="{ active: serverStatus.running }" />
         <span>
-          {{ serverStatus.running ? "Bridge listening" : "Bridge offline" }}
+          {{ serverStatus.running ? "桥接服务已启动" : "桥接服务离线" }}
           <small>{{ serverStatus.address }}</small>
         </span>
       </div>
 
       <header>
         <h1>LyricBridge</h1>
-        <p>YouTube playback bridge for desktop lyrics.</p>
+        <p>YouTube 桌面歌词桥接工具</p>
       </header>
 
       <section class="now-playing">
-        <span class="eyebrow">Now playing</span>
+        <span class="eyebrow">正在播放</span>
         <strong>{{ videoLabel }}</strong>
         <span>{{ progressLabel }}</span>
       </section>
 
       <dl class="metrics">
         <div>
-          <dt>Video ID</dt>
-          <dd>{{ latestState?.videoId || "Not detected" }}</dd>
+          <dt>视频 ID</dt>
+          <dd>{{ latestState?.videoId || "未检测到" }}</dd>
         </div>
         <div>
-          <dt>Status</dt>
-          <dd>{{ latestState ? (latestState.paused ? "Paused" : "Playing") : "Idle" }}</dd>
+          <dt>状态</dt>
+          <dd>{{ latestState ? (latestState.paused ? "已暂停" : "播放中") : "空闲" }}</dd>
         </div>
         <div>
-          <dt>Rate</dt>
+          <dt>速度</dt>
           <dd>{{ latestState?.playbackRate ?? 1 }}x</dd>
         </div>
         <div>
-          <dt>Extension</dt>
+          <dt>扩展</dt>
           <dd>{{ extensionStatusLabel }}</dd>
         </div>
         <div>
-          <dt>Last update</dt>
+          <dt>最近更新</dt>
           <dd>{{ formatLastUpdate(connectionStatus.lastMessageAt) }}</dd>
         </div>
       </dl>
 
       <section class="lyrics">
-        <span class="eyebrow">Lyrics</span>
-        <p class="current-line">{{ currentLyric?.text || "No lyric line active" }}</p>
-        <p class="next-line">{{ nextLyric?.text || "Bind an LRC file for this video" }}</p>
+        <span class="eyebrow">歌词</span>
+        <p class="current-line">{{ currentLyric?.text || "当前没有歌词" }}</p>
+        <p class="next-line">{{ nextLyric?.text || "配置目录中未找到该视频的歌词" }}</p>
       </section>
 
       <section class="overlay-controls">
-        <span class="eyebrow">Overlay window</span>
+        <span class="eyebrow">桌面歌词窗口</span>
         <div class="control-row">
           <button
             class="secondary-button"
             type="button"
             @click="setOverlayVisible(!overlaySettings.visible)"
           >
-            {{ overlaySettings.visible ? "Hide" : "Show" }}
+            {{ overlaySettings.visible ? "隐藏" : "显示" }}
           </button>
           <button
             class="secondary-button"
             type="button"
             @click="setOverlayLocked(!overlaySettings.locked)"
           >
-            {{ overlaySettings.locked ? "Unlock" : "Lock" }}
+            {{ overlaySettings.locked ? "解锁" : "锁定" }}
           </button>
           <button
             class="secondary-button"
             type="button"
             @click="setOverlayAlwaysOnTop(!overlaySettings.alwaysOnTop)"
           >
-            {{ overlaySettings.alwaysOnTop ? "Disable top" : "Always top" }}
+            {{ overlaySettings.alwaysOnTop ? "取消置顶" : "保持置顶" }}
           </button>
-          <button class="secondary-button" type="button" @click="resetOverlay">Reset</button>
+          <button class="secondary-button" type="button" @click="resetOverlay">重置</button>
         </div>
         <p class="hint compact">
-          {{ overlaySettings.locked ? "Locked: mouse clicks pass through lyrics." : "Unlocked: drag the lyrics window to move it." }}
+          {{ overlaySettings.locked ? "已锁定：鼠标点击会穿透歌词窗口。" : "未锁定：拖动歌词窗口可移动位置。" }}
         </p>
       </section>
 
       <section class="config-controls">
-        <span class="eyebrow">Config directory</span>
+        <span class="eyebrow">配置目录</span>
         <div class="config-row">
           <p class="path-display">
-            {{ configDirectoryStatus.directory || "No config directory selected" }}
+            {{ configDirectoryStatus.directory || "未选择配置目录" }}
           </p>
           <button class="secondary-button" type="button" @click="chooseConfigDirectory">
-            Browse
+            浏览
           </button>
           <button class="secondary-button" type="button" @click="reloadConfigDirectory">
-            Reload
+            重载
           </button>
           <button class="secondary-button" type="button" @click="clearConfigDirectory">
-            Clear
+            清除
           </button>
         </div>
         <p class="hint compact">
-          {{ configDirectoryStatus.bindingCount }} bindings loaded from bindings.json
+          已从 bindings.json 加载 {{ configDirectoryStatus.bindingCount }} 个绑定
         </p>
         <p v-if="configDirectoryStatus.error" class="error compact">
           {{ configDirectoryStatus.error }}
@@ -431,7 +431,7 @@ function formatLastUpdate(value: number | null): string {
       </section>
 
       <p v-if="activeBinding" class="hint">
-        {{ parsedLrc?.lines.length ?? 0 }} lines loaded from {{ activeBinding.lyricFilePath }}
+        已从 {{ activeBinding.lyricFilePath }} 加载 {{ parsedLrc?.lines.length ?? 0 }} 行歌词
       </p>
       <p v-if="serverStatus.error" class="error">{{ serverStatus.error }}</p>
       <p v-if="latestError" class="error">{{ latestError }}</p>
