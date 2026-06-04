@@ -130,6 +130,8 @@ onMounted(async () => {
     serverStatus.value = event.payload;
   });
 
+  serverStatus.value = await invoke<BridgeServerStatus>("get_bridge_server_status");
+
   await listen<BridgeMessage>("bridge-message", (event) => {
     if (event.payload.type === "player-state") {
       latestState.value = event.payload.payload;

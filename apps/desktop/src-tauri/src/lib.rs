@@ -1,6 +1,6 @@
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf, sync::Mutex};
 use tauri::{Emitter, Manager};
 use tokio::net::TcpListener;
 use tokio_tungstenite::accept_async;
@@ -12,6 +12,28 @@ struct BridgeServerStatus {
     address: &'static str,
     running: bool,
     error: Option<String>,
+}
+
+struct BridgeState {
+    server_status: Mutex<BridgeServerStatus>,
+}
+
+impl BridgeServerStatus {
+    fn offline(error: Option<String>) -> Self {
+        Self {
+            address: BRIDGE_ADDR,
+            running: false,
+            error,
+        }
+    }
+
+    fn online() -> Self {
+        Self {
+            address: BRIDGE_ADDR,
+            running: true,
+            error: None,
+        }
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -34,6 +56,17 @@ struct LyricBindingWithContent {
 #[derive(Default, Deserialize, Serialize)]
 struct BindingsStore {
     bindings: BTreeMap<String, LyricBinding>,
+}
+
+#[tauri::command]
+fn get_bridge_server_status(
+    state: tauri::State<'_, BridgeState>,
+) -> Result<BridgeServerStatus, String> {
+    state
+        .server_status
+        .lock()
+        .map(|status| status.clone())
+        .map_err(|error| format!("Failed to read bridge server status: {error}"))
 }
 
 #[tauri::command]
@@ -60,9 +93,7 @@ fn save_lyric_binding(
 
     let content = read_binding_content(&binding)?;
     let mut store = read_bindings_store(&app)?;
-    store
-        .bindings
-        .insert(binding.video_id.clone(), binding);
+    store.bindings.insert(binding.video_id.clone(), binding);
     write_bindings_store(&app, &store)?;
 
     Ok(content)
@@ -71,6 +102,9 @@ fn save_lyric_binding(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(BridgeState {
+            server_status: Mutex::new(BridgeServerStatus::offline(None)),
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -83,6 +117,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_bridge_server_status,
             get_lyric_binding,
             save_lyric_binding
         ])
@@ -93,25 +128,11 @@ pub fn run() {
 async fn run_bridge_server(app: tauri::AppHandle) {
     let listener = match TcpListener::bind(BRIDGE_ADDR).await {
         Ok(listener) => {
-            let _ = app.emit(
-                "bridge-server-status",
-                BridgeServerStatus {
-                    address: BRIDGE_ADDR,
-                    running: true,
-                    error: None,
-                },
-            );
+            set_bridge_server_status(&app, BridgeServerStatus::online());
             listener
         }
         Err(error) => {
-            let _ = app.emit(
-                "bridge-server-status",
-                BridgeServerStatus {
-                    address: BRIDGE_ADDR,
-                    running: false,
-                    error: Some(error.to_string()),
-                },
-            );
+            set_bridge_server_status(&app, BridgeServerStatus::offline(Some(error.to_string())));
             return;
         }
     };
@@ -148,6 +169,14 @@ async fn run_bridge_server(app: tauri::AppHandle) {
             }
         });
     }
+}
+
+fn set_bridge_server_status(app: &tauri::AppHandle, status: BridgeServerStatus) {
+    if let Ok(mut current) = app.state::<BridgeState>().server_status.lock() {
+        *current = status.clone();
+    }
+
+    let _ = app.emit("bridge-server-status", status);
 }
 
 fn read_binding_content(binding: &LyricBinding) -> Result<LyricBindingWithContent, String> {
