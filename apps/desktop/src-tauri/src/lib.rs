@@ -1,6 +1,12 @@
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fs, path::PathBuf, sync::Mutex};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::PathBuf,
+    sync::Mutex,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tauri::{
     Emitter, Manager, PhysicalPosition, PhysicalSize, Position, Size, WebviewWindow, WindowEvent,
 };
@@ -18,6 +24,7 @@ struct BridgeServerStatus {
 
 struct BridgeState {
     server_status: Mutex<BridgeServerStatus>,
+    connection_status: Mutex<BridgeConnectionStatus>,
     saving_overlay_settings: Mutex<bool>,
 }
 
@@ -35,6 +42,22 @@ impl BridgeServerStatus {
             address: BRIDGE_ADDR,
             running: true,
             error: None,
+        }
+    }
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BridgeConnectionStatus {
+    connected_clients: u32,
+    last_message_at: Option<u64>,
+}
+
+impl Default for BridgeConnectionStatus {
+    fn default() -> Self {
+        Self {
+            connected_clients: 0,
+            last_message_at: None,
         }
     }
 }
@@ -96,6 +119,17 @@ fn get_bridge_server_status(
         .lock()
         .map(|status| status.clone())
         .map_err(|error| format!("Failed to read bridge server status: {error}"))
+}
+
+#[tauri::command]
+fn get_bridge_connection_status(
+    state: tauri::State<'_, BridgeState>,
+) -> Result<BridgeConnectionStatus, String> {
+    state
+        .connection_status
+        .lock()
+        .map(|status| status.clone())
+        .map_err(|error| format!("Failed to read bridge connection status: {error}"))
 }
 
 #[tauri::command]
@@ -188,6 +222,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(BridgeState {
             server_status: Mutex::new(BridgeServerStatus::offline(None)),
+            connection_status: Mutex::new(BridgeConnectionStatus::default()),
             saving_overlay_settings: Mutex::new(false),
         })
         .plugin(tauri_plugin_dialog::init())
@@ -206,6 +241,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_bridge_connection_status,
             get_bridge_server_status,
             get_overlay_settings,
             reset_overlay_position,
@@ -240,6 +276,8 @@ async fn run_bridge_server(app: tauri::AppHandle) {
                 return;
             };
 
+            update_bridge_client_count(&app, 1);
+
             while let Some(message) = socket.next().await {
                 let Ok(message) = message else {
                     break;
@@ -255,6 +293,7 @@ async fn run_bridge_server(app: tauri::AppHandle) {
 
                 match serde_json::from_str::<serde_json::Value>(text) {
                     Ok(value) => {
+                        mark_bridge_message_received(&app);
                         let _ = app.emit("bridge-message", value);
                     }
                     Err(error) => {
@@ -262,6 +301,8 @@ async fn run_bridge_server(app: tauri::AppHandle) {
                     }
                 }
             }
+
+            update_bridge_client_count(&app, -1);
         });
     }
 }
@@ -272,6 +313,48 @@ fn set_bridge_server_status(app: &tauri::AppHandle, status: BridgeServerStatus) 
     }
 
     let _ = app.emit("bridge-server-status", status);
+}
+
+fn update_bridge_client_count(app: &tauri::AppHandle, delta: i32) {
+    let status = {
+        let state = app.state::<BridgeState>();
+        let Ok(mut status) = state.connection_status.lock() else {
+            return;
+        };
+
+        status.connected_clients = if delta.is_negative() {
+            status
+                .connected_clients
+                .saturating_sub(delta.unsigned_abs())
+        } else {
+            status.connected_clients.saturating_add(delta as u32)
+        };
+
+        status.clone()
+    };
+
+    let _ = app.emit("bridge-connection-status", status);
+}
+
+fn mark_bridge_message_received(app: &tauri::AppHandle) {
+    let status = {
+        let state = app.state::<BridgeState>();
+        let Ok(mut status) = state.connection_status.lock() else {
+            return;
+        };
+
+        status.last_message_at = Some(now_ms());
+        status.clone()
+    };
+
+    let _ = app.emit("bridge-connection-status", status);
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or_default()
 }
 
 fn read_binding_content(binding: &LyricBinding) -> Result<LyricBindingWithContent, String> {

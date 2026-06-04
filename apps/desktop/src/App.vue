@@ -17,6 +17,11 @@ type BridgeServerStatus = {
   error: string | null;
 };
 
+type BridgeConnectionStatus = {
+  connectedClients: number;
+  lastMessageAt: number | null;
+};
+
 type LyricBinding = {
   videoId: string;
   lyricFilePath: string;
@@ -41,6 +46,10 @@ const serverStatus = ref<BridgeServerStatus>({
   address: "127.0.0.1:32190",
   running: false,
   error: null
+});
+const connectionStatus = ref<BridgeConnectionStatus>({
+  connectedClients: 0,
+  lastMessageAt: null
 });
 const latestState = ref<PlayerState | null>(null);
 const latestError = ref<string | null>(null);
@@ -125,12 +134,25 @@ const nextLyric = computed(() => {
 
 const canSaveBinding = computed(() => Boolean(latestState.value?.videoId && lyricFilePath.value.trim()));
 
+const extensionStatusLabel = computed(() => {
+  if (connectionStatus.value.connectedClients <= 0) {
+    return "Not connected";
+  }
+
+  return `${connectionStatus.value.connectedClients} connected`;
+});
+
 onMounted(async () => {
   await listen<BridgeServerStatus>("bridge-server-status", (event) => {
     serverStatus.value = event.payload;
   });
 
+  await listen<BridgeConnectionStatus>("bridge-connection-status", (event) => {
+    connectionStatus.value = event.payload;
+  });
+
   serverStatus.value = await invoke<BridgeServerStatus>("get_bridge_server_status");
+  connectionStatus.value = await invoke<BridgeConnectionStatus>("get_bridge_connection_status");
   overlaySettings.value = await invoke<OverlaySettings>("get_overlay_settings");
 
   await listen<BridgeMessage>("bridge-message", (event) => {
@@ -267,6 +289,18 @@ function formatTime(value: number | null): string {
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
+
+function formatLastUpdate(value: number | null): string {
+  if (value === null) {
+    return "No updates";
+  }
+
+  return new Date(value).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
 </script>
 
 <template>
@@ -315,6 +349,14 @@ function formatTime(value: number | null): string {
         <div>
           <dt>Rate</dt>
           <dd>{{ latestState?.playbackRate ?? 1 }}x</dd>
+        </div>
+        <div>
+          <dt>Extension</dt>
+          <dd>{{ extensionStatusLabel }}</dd>
+        </div>
+        <div>
+          <dt>Last update</dt>
+          <dd>{{ formatLastUpdate(connectionStatus.lastMessageAt) }}</dd>
         </div>
       </dl>
 
@@ -499,7 +541,7 @@ header p {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 14px;
   margin: 18px 0;
 }
