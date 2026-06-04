@@ -593,25 +593,27 @@ button:disabled {
 }
 
 .floating-current::after {
-  content: "";
+  content: attr(data-text);
   position: absolute;
-  top: -18%;
-  bottom: -18%;
-  left: 0;
-  width: 36%;
+  inset: 0;
   overflow: hidden;
-  background: linear-gradient(
+  color: transparent;
+  background-image: linear-gradient(
     90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.08) 18%,
-    rgba(255, 255, 255, 0.34) 48%,
-    rgba(255, 255, 255, 0.08) 78%,
-    transparent 100%
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.12) 42%,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0.12) 58%,
+    rgba(255, 255, 255, 0) 100%
   );
-  filter: blur(1px);
-  opacity: 0.8;
+  background-position: calc(100% - var(--line-progress)) 0;
+  background-size: 220% 100%;
+  background-clip: text;
+  opacity: 0.75;
   pointer-events: none;
-  transform: translateX(calc((var(--line-progress) * 1.36) - 36%));
+  text-shadow: none;
+  transition: background-position 260ms linear;
+  -webkit-background-clip: text;
 }
 
 .floating-next {
