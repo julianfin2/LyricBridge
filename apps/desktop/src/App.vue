@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   findActiveLyricLine,
@@ -45,6 +45,12 @@ type OverlaySettings = {
   height: number;
 };
 
+type ConfigDirectoryChangedEvent = {
+  source: "main" | "lyrics";
+  updatedAt: number;
+};
+
+const CONFIG_DIRECTORY_CHANGED_EVENT = "config-directory-changed";
 const serverStatus = ref<BridgeServerStatus>({
   address: "127.0.0.1:32190",
   running: false,
@@ -75,6 +81,7 @@ const overlaySettings = ref<OverlaySettings>({
   height: 150
 });
 const isLyricsWindow = new URLSearchParams(window.location.search).get("window") === "lyrics";
+const windowSource = isLyricsWindow ? "lyrics" : "main";
 
 if (isLyricsWindow) {
   document.documentElement.classList.add("lyrics-root");
@@ -224,6 +231,15 @@ onMounted(async () => {
     overlaySettings.value = event.payload;
   });
 
+  await listen<ConfigDirectoryChangedEvent>(CONFIG_DIRECTORY_CHANGED_EVENT, async (event) => {
+    if (event.payload.source === windowSource) {
+      return;
+    }
+
+    configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("get_config_directory_status");
+    await reloadCurrentVideoBinding();
+  });
+
   serverStatus.value = await invoke<BridgeServerStatus>("get_bridge_server_status");
   connectionStatus.value = await invoke<BridgeConnectionStatus>("get_bridge_connection_status");
   configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("get_config_directory_status");
@@ -301,17 +317,17 @@ async function chooseConfigDirectory() {
     configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("set_config_directory", {
       directory: selected
     });
+
+    await reloadCurrentVideoBinding();
+    await notifyConfigDirectoryChanged();
   }
 }
 
 async function reloadConfigDirectory() {
   configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("get_config_directory_status");
 
-  const videoId = latestState.value?.videoId;
-  if (videoId) {
-    loadedVideoId.value = null;
-    await loadBinding(videoId);
-  }
+  await reloadCurrentVideoBinding();
+  await notifyConfigDirectoryChanged();
 }
 
 async function clearConfigDirectory() {
@@ -319,11 +335,23 @@ async function clearConfigDirectory() {
     directory: null
   });
 
+  await reloadCurrentVideoBinding();
+  await notifyConfigDirectoryChanged();
+}
+
+async function reloadCurrentVideoBinding() {
   const videoId = latestState.value?.videoId;
   if (videoId) {
     loadedVideoId.value = null;
     await loadBinding(videoId);
   }
+}
+
+async function notifyConfigDirectoryChanged() {
+  await emit<ConfigDirectoryChangedEvent>(CONFIG_DIRECTORY_CHANGED_EVENT, {
+    source: windowSource,
+    updatedAt: Date.now()
+  });
 }
 
 async function setOverlayVisible(visible: boolean) {
