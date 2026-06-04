@@ -11,7 +11,7 @@ use std::{
 };
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::TrayIconBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager, PhysicalPosition, PhysicalSize, Position, Size, WebviewWindow, WindowEvent,
 };
 use tokio::net::TcpListener;
@@ -410,6 +410,16 @@ fn setup_tray(app: &tauri::AppHandle) -> Result<(), String> {
         .menu(&menu)
         .tooltip("LyricBridge")
         .show_menu_on_left_click(false)
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let _ = show_main_window(tray.app_handle());
+            }
+        })
         .on_menu_event(|app, event| match event.id().as_ref() {
             TRAY_SHOW_MAIN_ID => {
                 let _ = show_main_window(app);
