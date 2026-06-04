@@ -50,6 +50,7 @@ const loadedVideoId = ref<string | null>(null);
 const lyricFilePath = ref("");
 const offsetMs = ref(0);
 const saving = ref(false);
+const overlayHovered = ref(false);
 const overlaySettings = ref<OverlaySettings>({
   locked: false,
   visible: true,
@@ -273,8 +274,10 @@ function formatTime(value: number | null): string {
   <main
     v-if="isLyricsWindow"
     class="lyrics-window"
-    :class="{ locked: overlaySettings.locked }"
+    :class="{ locked: overlaySettings.locked, hovered: overlayHovered }"
     @mousedown="startOverlayDrag"
+    @mouseenter="overlayHovered = true"
+    @mouseleave="overlayHovered = false"
   >
     <section class="floating-lyrics">
       <p class="floating-current">{{ currentLyric?.text || "LyricBridge" }}</p>
@@ -634,10 +637,20 @@ button:disabled {
   display: grid;
   align-items: center;
   padding: 10px 26px;
+  border-radius: 8px;
   box-sizing: border-box;
   background: transparent;
+  box-shadow: none;
   cursor: move;
   user-select: none;
+  transition:
+    box-shadow 120ms ease,
+    background-color 120ms ease;
+}
+
+.lyrics-window.hovered {
+  background: rgba(15, 23, 42, 0.08);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.32);
 }
 
 .lyrics-window.locked {
