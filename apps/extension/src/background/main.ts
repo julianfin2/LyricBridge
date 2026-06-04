@@ -5,11 +5,34 @@ type StatusMessage = {
   type: "lyricbridge-status";
 };
 
+type ActiveTabMessage = {
+  type: "lyricbridge-active-tab-request";
+};
+
+type RuntimeMessage = ActiveTabMessage | StatusMessage;
+
+let activeTabId: number | null = null;
+
 chrome.runtime.onInstalled.addListener(() => {
   console.info("LyricBridge extension installed");
 });
 
-chrome.runtime.onMessage.addListener((message: StatusMessage, sender) => {
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  activeTabId = activeInfo.tabId;
+});
+
+chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendResponse) => {
+  if (message?.type === "lyricbridge-active-tab-request") {
+    const tabId = sender.tab?.id ?? null;
+    const active = sender.tab?.active === true || (tabId !== null && tabId === activeTabId);
+
+    sendResponse({
+      active,
+      tabId
+    });
+    return;
+  }
+
   if (message?.type !== "lyricbridge-status") {
     return;
   }

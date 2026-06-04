@@ -9,7 +9,12 @@ import type { ExtensionPlaybackStatus } from "../status";
 const BRIDGE_URL = "ws://127.0.0.1:32190";
 const HEARTBEAT_MS = 250;
 const RECONNECT_MS = 1_500;
-const YOUTUBE_PAGE_HOSTS = new Set(["www.youtube.com", "youtube.com", "music.youtube.com"]);
+const YOUTUBE_WATCH_HOSTS = new Set(["www.youtube.com", "youtube.com", "music.youtube.com"]);
+
+type ActiveTabResponse = {
+  active: boolean;
+  tabId: number | null;
+};
 
 let socket: WebSocket | null = null;
 let reconnectTimer: number | null = null;
@@ -17,11 +22,15 @@ let heartbeatTimer: number | null = null;
 let observedVideo: HTMLVideoElement | null = null;
 let lastUrl = location.href;
 
-connect();
+reconcileBridgeConnection();
 startHeartbeat();
 observeUrlChanges();
 
 function connect() {
+  if (!isYouTubeWatchPage()) {
+    return;
+  }
+
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
     return;
   }
@@ -32,25 +41,28 @@ function connect() {
     sendPlayerState();
   });
   socket.addEventListener("close", () => {
+    socket = null;
     publishStatus();
-    scheduleReconnect();
+    if (isYouTubeWatchPage()) {
+      scheduleReconnect();
+    }
   });
   socket.addEventListener("error", () => {
     publishStatus();
-    scheduleReconnect();
+    if (isYouTubeWatchPage()) {
+      scheduleReconnect();
+    }
   });
 }
 
 function scheduleReconnect() {
-  socket = null;
-
   if (reconnectTimer !== null) {
     return;
   }
 
   reconnectTimer = window.setTimeout(() => {
     reconnectTimer = null;
-    connect();
+    reconcileBridgeConnection();
   }, RECONNECT_MS);
 }
 
@@ -60,6 +72,7 @@ function startHeartbeat() {
   }
 
   heartbeatTimer = window.setInterval(() => {
+    reconcileBridgeConnection();
     bindCurrentVideo();
     publishStatus();
     sendPlayerState();
@@ -89,26 +102,48 @@ function observeUrlChanges() {
 
     lastUrl = location.href;
     observedVideo = null;
+    reconcileBridgeConnection();
     bindCurrentVideo();
     publishStatus();
     sendPlayerState();
   }, 500);
 }
 
-function sendPlayerState() {
+function reconcileBridgeConnection() {
+  if (isYouTubeWatchPage()) {
+    connect();
+    return;
+  }
+
+  if (reconnectTimer !== null) {
+    window.clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  if (socket && socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) {
+    socket.close();
+  }
+  socket = null;
+}
+
+async function sendPlayerState() {
+  if (!isYouTubeWatchPage()) {
+    return;
+  }
+
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     return;
   }
 
   bindCurrentVideo();
 
-  if (!observedVideo) {
+  if (!observedVideo || !parseYouTubeVideoId(location.href)) {
     return;
   }
 
   const message: BridgeMessage = {
     type: "player-state",
-    payload: createPlayerState(observedVideo)
+    payload: createPlayerState(observedVideo, await getActiveTabState())
   };
 
   socket.send(JSON.stringify(message));
@@ -117,8 +152,9 @@ function sendPlayerState() {
 function publishStatus() {
   bindCurrentVideo();
 
+  const isWatchPage = isYouTubeWatchPage();
   const status: ExtensionPlaybackStatus = {
-    ...createStatusBase(observedVideo),
+    ...createStatusBase(isWatchPage ? observedVideo : null),
     bridgeConnected: socket?.readyState === WebSocket.OPEN,
     tabId: null,
     updatedAt: Date.now()
@@ -129,7 +165,7 @@ function publishStatus() {
   });
 }
 
-function createPlayerState(video: HTMLVideoElement): PlayerState {
+function createPlayerState(video: HTMLVideoElement, activeTabState: ActiveTabResponse | null): PlayerState {
   return {
     protocolVersion: BRIDGE_PROTOCOL_VERSION,
     source: "youtube",
@@ -140,22 +176,47 @@ function createPlayerState(video: HTMLVideoElement): PlayerState {
     duration: Number.isFinite(video.duration) ? video.duration : null,
     paused: video.paused,
     playbackRate: video.playbackRate,
+    sourceTabActive: activeTabState?.active,
+    sourceTabId: activeTabState?.tabId ?? null,
     observedAt: Date.now()
   };
 }
 
 function createStatusBase(video: HTMLVideoElement | null) {
+  const isWatchPage = isYouTubeWatchPage();
+
   return {
     currentTime: video?.currentTime ?? 0,
     duration: video && Number.isFinite(video.duration) ? video.duration : null,
     hasVideo: Boolean(video),
-    isYouTubePage: YOUTUBE_PAGE_HOSTS.has(location.hostname),
+    isYouTubePage: isWatchPage,
     paused: video?.paused ?? true,
     playbackRate: video?.playbackRate ?? 1,
     title: video ? readTitle() : null,
     url: location.href,
-    videoId: parseYouTubeVideoId(location.href)
+    videoId: isWatchPage ? parseYouTubeVideoId(location.href) : null
   };
+}
+
+function isYouTubeWatchPage(): boolean {
+  return YOUTUBE_WATCH_HOSTS.has(location.hostname) && location.pathname === "/watch" && Boolean(parseYouTubeVideoId(location.href));
+}
+
+async function getActiveTabState(): Promise<ActiveTabResponse | null> {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "lyricbridge-active-tab-request" });
+
+    if (!response || typeof response.active !== "boolean") {
+      return null;
+    }
+
+    return {
+      active: response.active,
+      tabId: typeof response.tabId === "number" ? response.tabId : null
+    };
+  } catch {
+    return null;
+  }
 }
 
 function readTitle(): string | null {

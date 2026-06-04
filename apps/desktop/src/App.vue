@@ -59,7 +59,15 @@ type ConfigDirectoryChangedEvent = {
   updatedAt: number;
 };
 
+type LogEntry = {
+  id: number;
+  kind: "info" | "success" | "warning" | "error";
+  message: string;
+  timestamp: number;
+};
+
 const CONFIG_DIRECTORY_CHANGED_EVENT = "config-directory-changed";
+const MAX_LOG_ENTRIES = 120;
 const serverStatus = ref<BridgeServerStatus>({
   address: "127.0.0.1:32190",
   running: false,
@@ -79,7 +87,9 @@ const latestState = ref<PlayerState | null>(null);
 const latestError = ref<string | null>(null);
 const bindingError = ref<string | null>(null);
 const activeBinding = ref<LyricBindingWithContent | null>(null);
+const logs = ref<LogEntry[]>([]);
 const loadedVideoId = ref<string | null>(null);
+const lastLoggedVideoId = ref<string | null>(null);
 const offsetMs = ref(0);
 const overlaySettings = ref<OverlaySettings>({
   locked: false,
@@ -275,10 +285,21 @@ const primaryStatus = computed(() => {
 onMounted(async () => {
   await listen<BridgeServerStatus>("bridge-server-status", (event) => {
     serverStatus.value = event.payload;
+    addLog(
+      event.payload.running ? "success" : "error",
+      event.payload.running ? "桥接服务已启动" : `桥接服务离线：${event.payload.error || "未知错误"}`
+    );
   });
 
   await listen<BridgeConnectionStatus>("bridge-connection-status", (event) => {
+    const previousCount = connectionStatus.value.connectedClients;
     connectionStatus.value = event.payload;
+    if (event.payload.connectedClients !== previousCount) {
+      addLog(
+        event.payload.connectedClients > 0 ? "success" : "warning",
+        `扩展连接数：${event.payload.connectedClients}`
+      );
+    }
   });
 
   await listen<OverlaySettings>("overlay-settings-changed", (event) => {
@@ -296,6 +317,7 @@ onMounted(async () => {
 
     configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("get_config_directory_status");
     await reloadCurrentVideoBinding();
+    addLog("info", "其他窗口更新了绑定源，已重新加载当前歌词");
   });
 
   serverStatus.value = await invoke<BridgeServerStatus>("get_bridge_server_status");
@@ -304,16 +326,26 @@ onMounted(async () => {
   bindingSourceUrl.value = configDirectoryStatus.value.directory || bindingSourceUrl.value;
   overlaySettings.value = await invoke<OverlaySettings>("get_overlay_settings");
   overlayStyleSettings.value = await invoke<OverlayStyleSettings>("get_overlay_style_settings");
+  addLog("info", "应用状态已加载");
 
   await listen<BridgeMessage>("bridge-message", (event) => {
     if (event.payload.type === "player-state") {
-      acceptPlayerState(event.payload.payload);
+      const accepted = acceptPlayerState(event.payload.payload);
       latestError.value = null;
+      if (
+        accepted &&
+        event.payload.payload.videoId &&
+        event.payload.payload.videoId !== lastLoggedVideoId.value
+      ) {
+        lastLoggedVideoId.value = event.payload.payload.videoId;
+        addLog("info", `检测到视频：${event.payload.payload.title || event.payload.payload.videoId}`);
+      }
     }
   });
 
   await listen<string>("bridge-message-error", (event) => {
     latestError.value = event.payload;
+    addLog("error", `桥接消息解析失败：${event.payload}`);
   });
 });
 
@@ -329,22 +361,50 @@ watch(
   }
 );
 
-function acceptPlayerState(nextState: PlayerState) {
+function acceptPlayerState(nextState: PlayerState): boolean {
   const currentState = latestState.value;
 
   if (!currentState) {
     latestState.value = nextState;
-    return;
+    return true;
+  }
+
+  if (nextState.videoId !== currentState.videoId) {
+    if (nextState.paused && !currentState.paused) {
+      return false;
+    }
+
+    if (nextState.paused && currentState.paused && !shouldAcceptPausedVideoSwitch(nextState, currentState)) {
+      return false;
+    }
+
+    latestState.value = nextState;
+    return true;
   }
 
   if (!nextState.paused) {
     latestState.value = nextState;
-    return;
+    return true;
   }
 
   if (nextState.videoId === currentState.videoId) {
     latestState.value = nextState;
+    return true;
   }
+
+  return false;
+}
+
+function shouldAcceptPausedVideoSwitch(nextState: PlayerState, currentState: PlayerState): boolean {
+  if (nextState.sourceTabActive === true) {
+    return true;
+  }
+
+  if (currentState.sourceTabActive === true) {
+    return false;
+  }
+
+  return false;
 }
 
 async function loadBinding(videoId: string) {
@@ -358,17 +418,21 @@ async function loadBinding(videoId: string) {
     });
 
     if (!binding) {
+      addLog("warning", `未找到歌词绑定：${videoId}`);
       return;
     }
 
     applyBinding(binding);
+    addLog("success", `已加载歌词：${videoId}`);
   } catch (error) {
     bindingError.value = String(error);
+    addLog("error", `加载歌词失败：${bindingError.value}`);
   }
 }
 
 async function syncRemoteBindings() {
   bindingError.value = null;
+  addLog("info", "正在同步绑定源");
 
   try {
     configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("sync_remote_bindings", {
@@ -378,13 +442,16 @@ async function syncRemoteBindings() {
 
     await reloadCurrentVideoBinding();
     await notifyConfigDirectoryChanged();
+    addLog("success", `绑定源同步完成：${configDirectoryStatus.value.bindingCount} 个有效绑定`);
   } catch (error) {
     bindingError.value = String(error);
+    addLog("error", `同步绑定源失败：${bindingError.value}`);
   }
 }
 
 async function reloadConfigDirectory() {
   bindingError.value = null;
+  addLog("info", "正在重新加载本地绑定源");
 
   try {
     configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("get_config_directory_status");
@@ -392,8 +459,10 @@ async function reloadConfigDirectory() {
 
     await reloadCurrentVideoBinding();
     await notifyConfigDirectoryChanged();
+    addLog("success", `本地绑定源已加载：${configDirectoryStatus.value.bindingCount} 个有效绑定`);
   } catch (error) {
     bindingError.value = String(error);
+    addLog("error", `加载本地绑定源失败：${bindingError.value}`);
   }
 }
 
@@ -401,25 +470,30 @@ async function updateCurrentLyric() {
   const videoId = latestState.value?.videoId;
   if (!videoId) {
     bindingError.value = "未检测到当前视频，无法更新歌词。";
+    addLog("warning", bindingError.value);
     return;
   }
 
   try {
     bindingError.value = null;
+    addLog("info", `正在更新歌词：${videoId}`);
     const binding = await invoke<LyricBindingWithContent | null>("update_lyric_binding", {
       videoId
     });
 
     if (binding) {
       applyBinding(binding);
+      addLog("success", `歌词已更新：${videoId}`);
     } else {
       activeBinding.value = null;
       offsetMs.value = 0;
+      addLog("warning", `未找到可更新的歌词：${videoId}`);
     }
 
     await notifyConfigDirectoryChanged();
   } catch (error) {
     bindingError.value = String(error);
+    addLog("error", `更新歌词失败：${bindingError.value}`);
   }
 }
 
@@ -442,12 +516,15 @@ async function loadLocalBinding(videoId: string) {
     });
 
     if (!binding) {
+      addLog("warning", `本地缓存未找到歌词：${videoId}`);
       return;
     }
 
     applyBinding(binding);
+    addLog("success", `已加载本地歌词：${videoId}`);
   } catch (error) {
     bindingError.value = String(error);
+    addLog("error", `加载本地歌词失败：${bindingError.value}`);
   }
 }
 
@@ -531,6 +608,23 @@ function formatLastUpdate(value: number | null): string {
   });
 }
 
+function addLog(kind: LogEntry["kind"], message: string) {
+  const trimmedMessage = message.trim();
+  if (!trimmedMessage) {
+    return;
+  }
+
+  logs.value = [
+    {
+      id: Date.now() + Math.random(),
+      kind,
+      message: trimmedMessage,
+      timestamp: Date.now()
+    },
+    ...logs.value
+  ].slice(0, MAX_LOG_ENTRIES);
+}
+
 function hexToRgba(hex: string, alpha: number): string {
   const normalized = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#000000";
   const red = Number.parseInt(normalized.slice(1, 3), 16);
@@ -599,29 +693,45 @@ function hexToRgba(hex: string, alpha: number): string {
     </section>
 
     <section class="content-grid">
-      <section class="lyrics surface primary-surface">
-        <div class="section-heading">
-          <span class="eyebrow">歌词</span>
-          <span class="video-id">{{ latestState?.videoId || "未检测到视频 ID" }}</span>
-        </div>
-        <div class="lyric-context">
-          <p class="context-line faded">{{ earlierLyric?.text || " " }}</p>
-          <p class="context-line muted">{{ previousLyric?.text || " " }}</p>
-          <p class="current-line">{{ currentLyric?.text || "当前没有歌词" }}</p>
-          <p class="context-line">{{ previewNextLyricText }}</p>
-          <p class="context-line muted">{{ upcomingLyric?.text || " " }}</p>
-          <p class="context-line faded">{{ laterLyric?.text || " " }}</p>
-        </div>
-        <div class="lyric-bottom">
-          <div class="lyric-progress">
-            <span :style="{ width: `${playbackProgressPercent}%` }" />
+      <div class="main-column">
+        <section class="lyrics surface primary-surface">
+          <div class="section-heading">
+            <span class="eyebrow">歌词</span>
+            <span class="video-id">{{ latestState?.videoId || "未检测到视频 ID" }}</span>
           </div>
-          <div class="lyric-footer">
-            <span>{{ progressLabel }}</span>
-            <span v-if="activeBinding">已加载 {{ parsedLrc?.lines.length ?? 0 }} 行歌词</span>
+          <div class="lyric-context">
+            <p class="context-line faded">{{ earlierLyric?.text || " " }}</p>
+            <p class="context-line muted">{{ previousLyric?.text || " " }}</p>
+            <p class="current-line">{{ currentLyric?.text || "当前没有歌词" }}</p>
+            <p class="context-line">{{ previewNextLyricText }}</p>
+            <p class="context-line muted">{{ upcomingLyric?.text || " " }}</p>
+            <p class="context-line faded">{{ laterLyric?.text || " " }}</p>
           </div>
-        </div>
-      </section>
+          <div class="lyric-bottom">
+            <div class="lyric-progress">
+              <span :style="{ width: `${playbackProgressPercent}%` }" />
+            </div>
+            <div class="lyric-footer">
+              <span>{{ progressLabel }}</span>
+              <span v-if="activeBinding">已加载 {{ parsedLrc?.lines.length ?? 0 }} 行歌词</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="surface log-panel">
+          <div class="section-heading">
+            <span class="eyebrow">日志</span>
+            <span class="binding-count">{{ logs.length }} 条</span>
+          </div>
+          <div class="log-list">
+            <p v-if="logs.length === 0" class="log-empty">暂无日志</p>
+            <article v-for="entry in logs" :key="entry.id" class="log-entry" :class="entry.kind">
+              <time>{{ formatLastUpdate(entry.timestamp) }}</time>
+              <span>{{ entry.message }}</span>
+            </article>
+          </div>
+        </section>
+      </div>
 
       <aside class="side-column">
         <section class="surface">
@@ -1034,8 +1144,11 @@ dd {
 .content-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+  align-items: stretch;
   gap: 14px;
+  min-height: 0;
   padding: 12px 22px 18px;
+  box-sizing: border-box;
 }
 
 .surface {
@@ -1044,14 +1157,22 @@ dd {
   box-sizing: border-box;
 }
 
+.main-column {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 150px;
+  gap: 14px;
+}
+
 .lyrics {
+  min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
 }
 
 .primary-surface {
-  min-height: 214px;
   padding-bottom: 10px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.86)),
@@ -1151,6 +1272,74 @@ dd {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.log-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.82)),
+    #ffffff;
+}
+
+.log-list {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.log-empty,
+.log-entry {
+  margin: 0;
+  min-width: 0;
+}
+
+.log-empty {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.log-entry {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 2px 0;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.log-entry time {
+  color: #64748b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.log-entry span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.log-entry.success {
+  color: #047857;
+}
+
+.log-entry.info {
+  color: #334155;
+}
+
+.log-entry.warning {
+  color: #b45309;
+}
+
+.log-entry.error {
+  color: #b42318;
 }
 
 .control-row {
@@ -1364,6 +1553,14 @@ button:disabled {
     padding-left: 16px;
     padding-right: 16px;
   }
+
+  .content-grid {
+    height: auto;
+  }
+
+  .main-column {
+    grid-template-rows: minmax(220px, auto) 150px;
+  }
 }
 
 @media (max-width: 560px) {
@@ -1383,6 +1580,12 @@ button:disabled {
   .lyric-footer span {
     white-space: normal;
   }
+
+  .log-entry {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
 }
 
 .lyrics-window {

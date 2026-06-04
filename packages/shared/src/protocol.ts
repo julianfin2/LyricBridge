@@ -12,6 +12,8 @@ export type PlayerState = {
   duration: number | null;
   paused: boolean;
   playbackRate: number;
+  sourceTabActive?: boolean;
+  sourceTabId?: number | null;
   observedAt: number;
 };
 
