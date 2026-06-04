@@ -161,6 +161,22 @@ const nextLyric = computed(() => {
   return parsedLrc.value.lines[activeLyricIndex.value + 1] ?? null;
 });
 
+const floatingNextLyricText = computed(() => {
+  if (nextLyric.value) {
+    return nextLyric.value.text;
+  }
+
+  return activeBinding.value ? " " : "等待已配置的 YouTube 歌词";
+});
+
+const previewNextLyricText = computed(() => {
+  if (nextLyric.value) {
+    return nextLyric.value.text;
+  }
+
+  return activeBinding.value ? " " : "配置目录中未找到该视频的歌词";
+});
+
 const upcomingLyric = computed(() => {
   if (!parsedLrc.value || activeLyricIndex.value < 0) {
     return null;
@@ -420,7 +436,7 @@ function formatLastUpdate(value: number | null): string {
   >
     <section class="floating-lyrics">
       <p class="floating-current">{{ currentLyric?.text || "LyricBridge" }}</p>
-      <p class="floating-next">{{ nextLyric?.text || "等待已配置的 YouTube 歌词" }}</p>
+      <p class="floating-next">{{ floatingNextLyricText }}</p>
     </section>
   </main>
 
@@ -478,7 +494,7 @@ function formatLastUpdate(value: number | null): string {
           <p class="context-line faded">{{ earlierLyric?.text || " " }}</p>
           <p class="context-line muted">{{ previousLyric?.text || " " }}</p>
           <p class="current-line">{{ currentLyric?.text || "当前没有歌词" }}</p>
-          <p class="context-line">{{ nextLyric?.text || "配置目录中未找到该视频的歌词" }}</p>
+          <p class="context-line">{{ previewNextLyricText }}</p>
           <p class="context-line muted">{{ upcomingLyric?.text || " " }}</p>
           <p class="context-line faded">{{ laterLyric?.text || " " }}</p>
         </div>
