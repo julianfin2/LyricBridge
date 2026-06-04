@@ -411,6 +411,7 @@ async function loadBinding(videoId: string) {
   bindingError.value = null;
   activeBinding.value = null;
   offsetMs.value = 0;
+  const videoName = formatVideoLogLabel(videoId);
 
   try {
     const binding = await invoke<LyricBindingWithContent | null>("get_lyric_binding", {
@@ -418,12 +419,12 @@ async function loadBinding(videoId: string) {
     });
 
     if (!binding) {
-      addLog("warning", `未找到歌词绑定：${videoId}`);
+      addLog("warning", `未找到歌词绑定：${videoName}`);
       return;
     }
 
     applyBinding(binding);
-    addLog("success", `已加载歌词：${videoId}`);
+    addLog("success", `已加载歌词：${videoName}`);
   } catch (error) {
     bindingError.value = String(error);
     addLog("error", `加载歌词失败：${bindingError.value}`);
@@ -473,21 +474,22 @@ async function updateCurrentLyric() {
     addLog("warning", bindingError.value);
     return;
   }
+  const videoName = formatVideoLogLabel(videoId);
 
   try {
     bindingError.value = null;
-    addLog("info", `正在更新歌词：${videoId}`);
+    addLog("info", `正在更新歌词：${videoName}`);
     const binding = await invoke<LyricBindingWithContent | null>("update_lyric_binding", {
       videoId
     });
 
     if (binding) {
       applyBinding(binding);
-      addLog("success", `歌词已更新：${videoId}`);
+      addLog("success", `歌词已更新：${videoName}`);
     } else {
       activeBinding.value = null;
       offsetMs.value = 0;
-      addLog("warning", `未找到可更新的歌词：${videoId}`);
+      addLog("warning", `未找到可更新的歌词：${videoName}`);
     }
 
     await notifyConfigDirectoryChanged();
@@ -509,6 +511,7 @@ async function loadLocalBinding(videoId: string) {
   bindingError.value = null;
   activeBinding.value = null;
   offsetMs.value = 0;
+  const videoName = formatVideoLogLabel(videoId);
 
   try {
     const binding = await invoke<LyricBindingWithContent | null>("get_local_lyric_binding", {
@@ -516,12 +519,12 @@ async function loadLocalBinding(videoId: string) {
     });
 
     if (!binding) {
-      addLog("warning", `本地缓存未找到歌词：${videoId}`);
+      addLog("warning", `本地缓存未找到歌词：${videoName}`);
       return;
     }
 
     applyBinding(binding);
-    addLog("success", `已加载本地歌词：${videoId}`);
+    addLog("success", `已加载本地歌词：${videoName}`);
   } catch (error) {
     bindingError.value = String(error);
     addLog("error", `加载本地歌词失败：${bindingError.value}`);
@@ -623,6 +626,15 @@ function addLog(kind: LogEntry["kind"], message: string) {
     },
     ...logs.value
   ].slice(0, MAX_LOG_ENTRIES);
+}
+
+function formatVideoLogLabel(videoId: string): string {
+  const currentState = latestState.value;
+  if (currentState?.videoId === videoId && currentState.title) {
+    return currentState.title;
+  }
+
+  return videoId;
 }
 
 function hexToRgba(hex: string, alpha: number): string {
