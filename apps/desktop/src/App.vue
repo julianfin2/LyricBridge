@@ -627,30 +627,7 @@ function hexToRgba(hex: string, alpha: number): string {
         <section class="surface">
           <div class="section-heading">
             <span class="eyebrow">桌面歌词窗口</span>
-          </div>
-          <div class="control-row">
-            <button
-              class="secondary-button"
-              type="button"
-              @click="setOverlayVisible(!overlaySettings.visible)"
-            >
-              {{ overlaySettings.visible ? "隐藏" : "显示" }}
-            </button>
-            <button
-              class="secondary-button"
-              type="button"
-              @click="setOverlayLocked(!overlaySettings.locked)"
-            >
-              {{ overlaySettings.locked ? "解锁" : "锁定" }}
-            </button>
-            <button
-              class="secondary-button"
-              type="button"
-              @click="setOverlayAlwaysOnTop(!overlaySettings.alwaysOnTop)"
-            >
-              {{ overlaySettings.alwaysOnTop ? "取消置顶" : "保持置顶" }}
-            </button>
-            <button class="secondary-button" type="button" @click="resetOverlay">重置</button>
+            <button class="link-button" type="button" @click="resetOverlay">重置</button>
           </div>
           <!-- <p class="hint compact">
             {{ overlaySettings.locked ? "已锁定：鼠标点击会穿透歌词窗口。" : "未锁定：拖动歌词窗口可移动位置。" }}
@@ -680,6 +657,29 @@ function hexToRgba(hex: string, alpha: number): string {
               />
               <strong>{{ overlaySettings.height }}px</strong>
             </label>
+          </div>
+          <div class="control-row overlay-action-row">
+            <button
+              class="secondary-button"
+              type="button"
+              @click="setOverlayVisible(!overlaySettings.visible)"
+            >
+              {{ overlaySettings.visible ? "隐藏" : "显示" }}
+            </button>
+            <button
+              class="secondary-button"
+              type="button"
+              @click="setOverlayLocked(!overlaySettings.locked)"
+            >
+              {{ overlaySettings.locked ? "解锁" : "锁定" }}
+            </button>
+            <button
+              class="secondary-button"
+              type="button"
+              @click="setOverlayAlwaysOnTop(!overlaySettings.alwaysOnTop)"
+            >
+              {{ overlaySettings.alwaysOnTop ? "取消置顶" : "保持置顶" }}
+            </button>
           </div>
         </section>
 
@@ -1155,8 +1155,12 @@ dd {
 
 .control-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 9px;
+}
+
+.overlay-action-row {
+  margin-top: 10px;
 }
 
 button {
