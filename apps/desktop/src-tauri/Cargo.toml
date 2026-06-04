@@ -26,4 +26,4 @@ serde_json = "1"
 futures-util = "0.3"
 reqwest = "0.13.4"
 tokio = { version = "1", features = ["net"] }
-tokio-tungstenite = "0.26"
+tokio-tungstenite = "0.29"
