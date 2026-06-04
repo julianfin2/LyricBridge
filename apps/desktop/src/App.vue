@@ -22,6 +22,12 @@ type BridgeConnectionStatus = {
   lastMessageAt: number | null;
 };
 
+type ConfigDirectoryStatus = {
+  directory: string | null;
+  bindingCount: number;
+  error: string | null;
+};
+
 type LyricBinding = {
   videoId: string;
   lyricFilePath: string;
@@ -50,6 +56,11 @@ const serverStatus = ref<BridgeServerStatus>({
 const connectionStatus = ref<BridgeConnectionStatus>({
   connectedClients: 0,
   lastMessageAt: null
+});
+const configDirectoryStatus = ref<ConfigDirectoryStatus>({
+  directory: null,
+  bindingCount: 0,
+  error: null
 });
 const latestState = ref<PlayerState | null>(null);
 const latestError = ref<string | null>(null);
@@ -153,6 +164,7 @@ onMounted(async () => {
 
   serverStatus.value = await invoke<BridgeServerStatus>("get_bridge_server_status");
   connectionStatus.value = await invoke<BridgeConnectionStatus>("get_bridge_connection_status");
+  configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("get_config_directory_status");
   overlaySettings.value = await invoke<OverlaySettings>("get_overlay_settings");
 
   await listen<BridgeMessage>("bridge-message", (event) => {
@@ -262,6 +274,41 @@ async function chooseLyricFile() {
 
   if (typeof selected === "string") {
     lyricFilePath.value = selected;
+  }
+}
+
+async function chooseConfigDirectory() {
+  const selected = await open({
+    directory: true,
+    multiple: false
+  });
+
+  if (typeof selected === "string") {
+    configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("set_config_directory", {
+      directory: selected
+    });
+  }
+}
+
+async function reloadConfigDirectory() {
+  configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("get_config_directory_status");
+
+  const videoId = latestState.value?.videoId;
+  if (videoId) {
+    loadedVideoId.value = null;
+    await loadBinding(videoId);
+  }
+}
+
+async function clearConfigDirectory() {
+  configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("set_config_directory", {
+    directory: null
+  });
+
+  const videoId = latestState.value?.videoId;
+  if (videoId) {
+    loadedVideoId.value = null;
+    await loadBinding(videoId);
   }
 }
 
@@ -415,6 +462,30 @@ function formatLastUpdate(value: number | null): string {
         </p>
       </section>
 
+      <section class="config-controls">
+        <span class="eyebrow">Config directory</span>
+        <div class="config-row">
+          <p class="path-display">
+            {{ configDirectoryStatus.directory || "No config directory selected" }}
+          </p>
+          <button class="secondary-button" type="button" @click="chooseConfigDirectory">
+            Browse
+          </button>
+          <button class="secondary-button" type="button" @click="reloadConfigDirectory">
+            Reload
+          </button>
+          <button class="secondary-button" type="button" @click="clearConfigDirectory">
+            Clear
+          </button>
+        </div>
+        <p class="hint compact">
+          {{ configDirectoryStatus.bindingCount }} bindings loaded from bindings.json
+        </p>
+        <p v-if="configDirectoryStatus.error" class="error compact">
+          {{ configDirectoryStatus.error }}
+        </p>
+      </section>
+
       <form class="binding-form" @submit.prevent="saveBinding">
         <label>
           <span>LRC file path</span>
@@ -535,7 +606,8 @@ header p {
 
 .now-playing,
 .lyrics,
-.overlay-controls {
+.overlay-controls,
+.config-controls {
   display: grid;
   gap: 6px;
   padding: 18px;
@@ -579,7 +651,8 @@ dd {
   margin-bottom: 18px;
 }
 
-.overlay-controls {
+.overlay-controls,
+.config-controls {
   margin-bottom: 18px;
 }
 
@@ -662,6 +735,27 @@ button:disabled {
   gap: 8px;
 }
 
+.config-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 88px);
+  gap: 8px;
+}
+
+.path-display {
+  min-width: 0;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 10px;
+  overflow-wrap: anywhere;
+  color: #1f2933;
+  background: #ffffff;
+  border: 1px solid #cbd5df;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
 .hint,
 .error {
   margin: 14px 0 0;
@@ -684,7 +778,8 @@ button:disabled {
 @media (max-width: 680px) {
   .metrics,
   .binding-form,
-  .control-row {
+  .control-row,
+  .config-row {
     grid-template-columns: 1fr;
   }
 }

@@ -45,3 +45,25 @@ video_id -> lyric_file_path -> offset_ms
 
 `offset_ms` is required because YouTube uploads often contain intros, silence,
 or MV-only timing that does not match a normal LRC file exactly.
+
+## Config Directory
+
+LyricBridge can load bindings from a user-selected config directory. The
+directory must contain `bindings.json`.
+
+```json
+{
+  "bindings": [
+    {
+      "videoId": "dQw4w9WgXcQ",
+      "lyricFile": "lyrics/song.lrc",
+      "offsetMs": 0
+    }
+  ]
+}
+```
+
+`lyricFile` may be an absolute path or a relative path. Relative paths are
+resolved from the selected config directory.
+
+Config directory bindings take priority over the app's manual local bindings.

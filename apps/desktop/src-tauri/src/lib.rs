@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -79,6 +79,33 @@ struct LyricBindingWithContent {
     lyric_text: String,
 }
 
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExternalLyricBinding {
+    video_id: String,
+    lyric_file: String,
+    offset_ms: i32,
+}
+
+#[derive(Deserialize)]
+struct ExternalBindingsStore {
+    bindings: Vec<ExternalLyricBinding>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConfigDirectorySettings {
+    directory: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConfigDirectoryStatus {
+    directory: Option<String>,
+    binding_count: usize,
+    error: Option<String>,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct OverlaySettings {
@@ -138,6 +165,29 @@ fn get_overlay_settings(app: tauri::AppHandle) -> Result<OverlaySettings, String
 }
 
 #[tauri::command]
+fn get_config_directory_status(app: tauri::AppHandle) -> ConfigDirectoryStatus {
+    config_directory_status(&app)
+}
+
+#[tauri::command]
+fn set_config_directory(
+    app: tauri::AppHandle,
+    directory: Option<String>,
+) -> Result<ConfigDirectoryStatus, String> {
+    let directory = directory.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
+
+    write_config_directory_settings(&app, &ConfigDirectorySettings { directory })?;
+    Ok(config_directory_status(&app))
+}
+
+#[tauri::command]
 fn set_overlay_visible(app: tauri::AppHandle, visible: bool) -> Result<OverlaySettings, String> {
     let mut settings = read_overlay_settings(&app)?;
     settings.visible = visible;
@@ -192,6 +242,10 @@ fn get_lyric_binding(
     app: tauri::AppHandle,
     video_id: String,
 ) -> Result<Option<LyricBindingWithContent>, String> {
+    if let Some(binding) = read_external_lyric_binding(&app, &video_id)? {
+        return Ok(Some(binding));
+    }
+
     let store = read_bindings_store(&app)?;
     let Some(binding) = store.bindings.get(&video_id) else {
         return Ok(None);
@@ -243,8 +297,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_bridge_connection_status,
             get_bridge_server_status,
+            get_config_directory_status,
             get_overlay_settings,
             reset_overlay_position,
+            set_config_directory,
             set_overlay_always_on_top,
             set_overlay_locked,
             set_overlay_visible,
@@ -369,6 +425,53 @@ fn read_binding_content(binding: &LyricBinding) -> Result<LyricBindingWithConten
     })
 }
 
+fn read_external_lyric_binding(
+    app: &tauri::AppHandle,
+    video_id: &str,
+) -> Result<Option<LyricBindingWithContent>, String> {
+    let Some(config_dir) = read_config_directory_settings(app)?.directory else {
+        return Ok(None);
+    };
+
+    let config_dir = PathBuf::from(config_dir);
+    let store = read_external_bindings_store(&config_dir)?;
+    let Some(binding) = store
+        .bindings
+        .into_iter()
+        .find(|binding| binding.video_id == video_id)
+    else {
+        return Ok(None);
+    };
+
+    let lyric_path = resolve_config_lyric_path(&config_dir, &binding.lyric_file);
+    let lyric_text = fs::read_to_string(&lyric_path)
+        .map_err(|error| format!("Failed to read config lyric file: {error}"))?;
+
+    Ok(Some(LyricBindingWithContent {
+        video_id: binding.video_id,
+        lyric_file_path: lyric_path.to_string_lossy().into_owned(),
+        offset_ms: binding.offset_ms,
+        lyric_text,
+    }))
+}
+
+fn read_external_bindings_store(config_dir: &Path) -> Result<ExternalBindingsStore, String> {
+    let path = config_dir.join("bindings.json");
+    let text = fs::read_to_string(&path)
+        .map_err(|error| format!("Failed to read config bindings.json: {error}"))?;
+    serde_json::from_str(&text)
+        .map_err(|error| format!("Failed to parse config bindings.json: {error}"))
+}
+
+fn resolve_config_lyric_path(config_dir: &Path, lyric_file: &str) -> PathBuf {
+    let path = PathBuf::from(lyric_file);
+    if path.is_absolute() {
+        path
+    } else {
+        config_dir.join(path)
+    }
+}
+
 fn read_bindings_store(app: &tauri::AppHandle) -> Result<BindingsStore, String> {
     let path = bindings_store_path(app)?;
 
@@ -398,6 +501,79 @@ fn bindings_store_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
         .map(|dir| dir.join("bindings.json"))
+        .map_err(|error| format!("Failed to resolve app data directory: {error}"))
+}
+
+fn config_directory_status(app: &tauri::AppHandle) -> ConfigDirectoryStatus {
+    let settings = match read_config_directory_settings(app) {
+        Ok(settings) => settings,
+        Err(error) => {
+            return ConfigDirectoryStatus {
+                directory: None,
+                binding_count: 0,
+                error: Some(error),
+            };
+        }
+    };
+
+    let Some(directory) = settings.directory.clone() else {
+        return ConfigDirectoryStatus {
+            directory: None,
+            binding_count: 0,
+            error: None,
+        };
+    };
+
+    match read_external_bindings_store(Path::new(&directory)) {
+        Ok(store) => ConfigDirectoryStatus {
+            directory: Some(directory),
+            binding_count: store.bindings.len(),
+            error: None,
+        },
+        Err(error) => ConfigDirectoryStatus {
+            directory: Some(directory),
+            binding_count: 0,
+            error: Some(error),
+        },
+    }
+}
+
+fn read_config_directory_settings(
+    app: &tauri::AppHandle,
+) -> Result<ConfigDirectorySettings, String> {
+    let path = config_directory_settings_path(app)?;
+
+    if !path.exists() {
+        return Ok(ConfigDirectorySettings { directory: None });
+    }
+
+    let text = fs::read_to_string(&path)
+        .map_err(|error| format!("Failed to read config directory settings: {error}"))?;
+    serde_json::from_str(&text)
+        .map_err(|error| format!("Failed to parse config directory settings: {error}"))
+}
+
+fn write_config_directory_settings(
+    app: &tauri::AppHandle,
+    settings: &ConfigDirectorySettings,
+) -> Result<(), String> {
+    let path = config_directory_settings_path(app)?;
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create app data directory: {error}"))?;
+    }
+
+    let text = serde_json::to_string_pretty(settings)
+        .map_err(|error| format!("Failed to serialize config directory settings: {error}"))?;
+    fs::write(path, text)
+        .map_err(|error| format!("Failed to write config directory settings: {error}"))
+}
+
+fn config_directory_settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join("config-directory.json"))
         .map_err(|error| format!("Failed to resolve app data directory: {error}"))
 }
 
