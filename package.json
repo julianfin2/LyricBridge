@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev:desktop": "pnpm --dir apps/desktop tauri dev",
-    "build:desktop": "pnpm --dir apps/desktop tauri build",
+    "build:shared": "pnpm --filter @lyricbridge/shared build",
+    "build:desktop": "pnpm build:shared && pnpm --dir apps/desktop tauri build",
     "dev:extension": "pnpm --filter @lyricbridge/extension dev",
-    "build:extension": "pnpm --filter @lyricbridge/extension build",
+    "build:extension": "pnpm build:shared && pnpm --filter @lyricbridge/extension build",
     "build": "pnpm -r build"
   },
   "packageManager": "pnpm@11.5.0"
