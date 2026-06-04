@@ -179,6 +179,7 @@ fn set_overlay_visible(app: tauri::AppHandle, visible: bool) -> Result<OverlaySe
     settings.visible = visible;
     write_overlay_settings(&app, &settings)?;
     apply_overlay_settings(&app, &settings)?;
+    emit_overlay_settings_changed(&app, &settings);
     Ok(settings)
 }
 
@@ -188,6 +189,7 @@ fn set_overlay_locked(app: tauri::AppHandle, locked: bool) -> Result<OverlaySett
     settings.locked = locked;
     write_overlay_settings(&app, &settings)?;
     apply_overlay_settings(&app, &settings)?;
+    emit_overlay_settings_changed(&app, &settings);
     Ok(settings)
 }
 
@@ -200,6 +202,7 @@ fn set_overlay_always_on_top(
     settings.always_on_top = always_on_top;
     write_overlay_settings(&app, &settings)?;
     apply_overlay_settings(&app, &settings)?;
+    emit_overlay_settings_changed(&app, &settings);
     Ok(settings)
 }
 
@@ -212,6 +215,7 @@ fn reset_overlay_position(app: tauri::AppHandle) -> Result<OverlaySettings, Stri
     settings.height = 150;
     write_overlay_settings(&app, &settings)?;
     apply_overlay_settings(&app, &settings)?;
+    emit_overlay_settings_changed(&app, &settings);
     Ok(settings)
 }
 
@@ -649,9 +653,13 @@ fn update_overlay_geometry(
     write_overlay_settings(app, &settings)
 }
 
+fn emit_overlay_settings_changed(app: &tauri::AppHandle, settings: &OverlaySettings) {
+    let _ = app.emit("overlay-settings-changed", settings.clone());
+}
+
 fn lyrics_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
     app.get_webview_window("lyrics")
-        .ok_or_else(|| "Lyrics window is not available".to_string())
+        .ok_or_else(|| "桌面歌词窗口不可用".to_string())
 }
 
 struct OverlaySaveGuard<'a> {

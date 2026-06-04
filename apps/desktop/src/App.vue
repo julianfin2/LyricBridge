@@ -155,6 +155,10 @@ onMounted(async () => {
     connectionStatus.value = event.payload;
   });
 
+  await listen<OverlaySettings>("overlay-settings-changed", (event) => {
+    overlaySettings.value = event.payload;
+  });
+
   serverStatus.value = await invoke<BridgeServerStatus>("get_bridge_server_status");
   connectionStatus.value = await invoke<BridgeConnectionStatus>("get_bridge_connection_status");
   configDirectoryStatus.value = await invoke<ConfigDirectoryStatus>("get_config_directory_status");
@@ -276,7 +280,7 @@ async function resetOverlay() {
 }
 
 async function startOverlayDrag(event: MouseEvent) {
-  if (!isLyricsWindow || overlaySettings.value.locked || event.button !== 0) {
+  if (!isLyricsWindow || event.button !== 0) {
     return;
   }
 
