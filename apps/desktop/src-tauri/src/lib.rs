@@ -774,7 +774,7 @@ async fn config_directory_status(app: &tauri::AppHandle) -> ConfigDirectoryStatu
     match read_external_bindings_store_or_sync(app, &source_url).await {
         Ok(store) => ConfigDirectoryStatus {
             directory,
-            binding_count: store.bindings.len(),
+            binding_count: valid_binding_count(&store),
             error: None,
         },
         Err(error) => ConfigDirectoryStatus {
@@ -783,6 +783,18 @@ async fn config_directory_status(app: &tauri::AppHandle) -> ConfigDirectoryStatu
             error: Some(error),
         },
     }
+}
+
+fn valid_binding_count(store: &ExternalBindingsStore) -> usize {
+    store
+        .bindings
+        .iter()
+        .filter(|binding| is_valid_external_binding(binding))
+        .count()
+}
+
+fn is_valid_external_binding(binding: &ExternalLyricBinding) -> bool {
+    !binding.video_id.trim().is_empty() && !binding.lyric_file.trim().is_empty()
 }
 
 fn read_config_directory_settings(
