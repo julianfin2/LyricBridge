@@ -3,16 +3,24 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{
+    menu::{Menu, MenuItem, PredefinedMenuItem},
+    tray::TrayIconBuilder,
     Emitter, Manager, PhysicalPosition, PhysicalSize, Position, Size, WebviewWindow, WindowEvent,
 };
 use tokio::net::TcpListener;
 use tokio_tungstenite::accept_async;
 
 const BRIDGE_ADDR: &str = "127.0.0.1:32190";
+const TRAY_SHOW_MAIN_ID: &str = "show-main";
+const TRAY_TOGGLE_LYRICS_ID: &str = "toggle-lyrics";
+const TRAY_EXIT_ID: &str = "exit";
 
 #[derive(Clone, Serialize)]
 struct BridgeServerStatus {
@@ -25,6 +33,7 @@ struct BridgeState {
     server_status: Mutex<BridgeServerStatus>,
     connection_status: Mutex<BridgeConnectionStatus>,
     saving_overlay_settings: Mutex<bool>,
+    exiting: AtomicBool,
 }
 
 impl BridgeServerStatus {
@@ -242,6 +251,7 @@ pub fn run() {
             server_status: Mutex::new(BridgeServerStatus::offline(None)),
             connection_status: Mutex::new(BridgeConnectionStatus::default()),
             saving_overlay_settings: Mutex::new(false),
+            exiting: AtomicBool::new(false),
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -254,6 +264,8 @@ pub fn run() {
 
             let settings = read_overlay_settings(app.handle())?;
             apply_overlay_settings(app.handle(), &settings)?;
+            setup_tray(app.handle())?;
+            register_main_window_events(app.handle())?;
             register_overlay_window_events(app.handle())?;
 
             Ok(())
@@ -376,6 +388,100 @@ fn now_ms() -> u64 {
         .unwrap_or_default()
 }
 
+fn setup_tray(app: &tauri::AppHandle) -> Result<(), String> {
+    let show_main = MenuItem::with_id(app, TRAY_SHOW_MAIN_ID, "显示主窗口", true, None::<&str>)
+        .map_err(|error| format!("创建托盘菜单失败：{error}"))?;
+    let toggle_lyrics = MenuItem::with_id(
+        app,
+        TRAY_TOGGLE_LYRICS_ID,
+        "显示/隐藏桌面歌词",
+        true,
+        None::<&str>,
+    )
+    .map_err(|error| format!("创建托盘菜单失败：{error}"))?;
+    let separator =
+        PredefinedMenuItem::separator(app).map_err(|error| format!("创建托盘菜单失败：{error}"))?;
+    let exit = MenuItem::with_id(app, TRAY_EXIT_ID, "退出 LyricBridge", true, None::<&str>)
+        .map_err(|error| format!("创建托盘菜单失败：{error}"))?;
+
+    let menu = Menu::with_items(app, &[&show_main, &toggle_lyrics, &separator, &exit])
+        .map_err(|error| format!("创建托盘菜单失败：{error}"))?;
+    let mut tray = TrayIconBuilder::with_id("lyricbridge")
+        .menu(&menu)
+        .tooltip("LyricBridge")
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            TRAY_SHOW_MAIN_ID => {
+                let _ = show_main_window(app);
+            }
+            TRAY_TOGGLE_LYRICS_ID => {
+                let _ = toggle_overlay_visible(app);
+            }
+            TRAY_EXIT_ID => {
+                exit_app(app);
+            }
+            _ => {}
+        });
+
+    if let Some(icon) = app.default_window_icon().cloned() {
+        tray = tray.icon(icon);
+    }
+
+    tray.build(app)
+        .map(|_| ())
+        .map_err(|error| format!("创建系统托盘图标失败：{error}"))
+}
+
+fn register_main_window_events(app: &tauri::AppHandle) -> Result<(), String> {
+    let window = main_window(app)?;
+    let app = app.clone();
+
+    window.on_window_event(move |event| {
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            if app.state::<BridgeState>().exiting.load(Ordering::SeqCst) {
+                return;
+            }
+
+            api.prevent_close();
+            let _ = hide_main_window(&app);
+        }
+    });
+
+    Ok(())
+}
+
+fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
+    let window = main_window(app)?;
+    window
+        .show()
+        .map_err(|error| format!("显示主窗口失败：{error}"))?;
+    window
+        .set_focus()
+        .map_err(|error| format!("聚焦主窗口失败：{error}"))
+}
+
+fn hide_main_window(app: &tauri::AppHandle) -> Result<(), String> {
+    main_window(app)?
+        .hide()
+        .map_err(|error| format!("隐藏主窗口失败：{error}"))
+}
+
+fn toggle_overlay_visible(app: &tauri::AppHandle) -> Result<(), String> {
+    let mut settings = read_overlay_settings(app)?;
+    settings.visible = !settings.visible;
+    write_overlay_settings(app, &settings)?;
+    apply_overlay_settings(app, &settings)?;
+    emit_overlay_settings_changed(app, &settings);
+    Ok(())
+}
+
+fn exit_app(app: &tauri::AppHandle) {
+    app.state::<BridgeState>()
+        .exiting
+        .store(true, Ordering::SeqCst);
+    app.exit(0);
+}
+
 fn read_external_lyric_binding(
     app: &tauri::AppHandle,
     video_id: &str,
@@ -410,8 +516,7 @@ fn read_external_bindings_store(config_dir: &Path) -> Result<ExternalBindingsSto
     let path = config_dir.join("bindings.json");
     let text = fs::read_to_string(&path)
         .map_err(|error| format!("读取配置目录 bindings.json 失败：{error}"))?;
-    serde_json::from_str(&text)
-        .map_err(|error| format!("解析配置目录 bindings.json 失败：{error}"))
+    serde_json::from_str(&text).map_err(|error| format!("解析配置目录 bindings.json 失败：{error}"))
 }
 
 fn resolve_config_lyric_path(config_dir: &Path, lyric_file: &str) -> PathBuf {
@@ -466,10 +571,9 @@ fn read_config_directory_settings(
         return Ok(ConfigDirectorySettings { directory: None });
     }
 
-    let text = fs::read_to_string(&path)
-        .map_err(|error| format!("读取配置目录设置失败：{error}"))?;
-    serde_json::from_str(&text)
-        .map_err(|error| format!("解析配置目录设置失败：{error}"))
+    let text =
+        fs::read_to_string(&path).map_err(|error| format!("读取配置目录设置失败：{error}"))?;
+    serde_json::from_str(&text).map_err(|error| format!("解析配置目录设置失败：{error}"))
 }
 
 fn write_config_directory_settings(
@@ -479,14 +583,12 @@ fn write_config_directory_settings(
     let path = config_directory_settings_path(app)?;
 
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("创建应用数据目录失败：{error}"))?;
+        fs::create_dir_all(parent).map_err(|error| format!("创建应用数据目录失败：{error}"))?;
     }
 
     let text = serde_json::to_string_pretty(settings)
         .map_err(|error| format!("序列化配置目录设置失败：{error}"))?;
-    fs::write(path, text)
-        .map_err(|error| format!("写入配置目录设置失败：{error}"))
+    fs::write(path, text).map_err(|error| format!("写入配置目录设置失败：{error}"))
 }
 
 fn config_directory_settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -503,10 +605,9 @@ fn read_overlay_settings(app: &tauri::AppHandle) -> Result<OverlaySettings, Stri
         return Ok(OverlaySettings::default());
     }
 
-    let text = fs::read_to_string(&path)
-        .map_err(|error| format!("读取桌面歌词窗口设置失败：{error}"))?;
-    serde_json::from_str(&text)
-        .map_err(|error| format!("解析桌面歌词窗口设置失败：{error}"))
+    let text =
+        fs::read_to_string(&path).map_err(|error| format!("读取桌面歌词窗口设置失败：{error}"))?;
+    serde_json::from_str(&text).map_err(|error| format!("解析桌面歌词窗口设置失败：{error}"))
 }
 
 fn write_overlay_settings(
@@ -516,8 +617,7 @@ fn write_overlay_settings(
     let path = overlay_settings_path(app)?;
 
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("创建应用数据目录失败：{error}"))?;
+        fs::create_dir_all(parent).map_err(|error| format!("创建应用数据目录失败：{error}"))?;
     }
 
     let text = serde_json::to_string_pretty(settings)
@@ -660,6 +760,11 @@ fn emit_overlay_settings_changed(app: &tauri::AppHandle, settings: &OverlaySetti
 fn lyrics_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
     app.get_webview_window("lyrics")
         .ok_or_else(|| "桌面歌词窗口不可用".to_string())
+}
+
+fn main_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
+    app.get_webview_window("main")
+        .ok_or_else(|| "主窗口不可用".to_string())
 }
 
 struct OverlaySaveGuard<'a> {
