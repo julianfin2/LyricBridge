@@ -157,7 +157,7 @@ onMounted(async () => {
 
   await listen<BridgeMessage>("bridge-message", (event) => {
     if (event.payload.type === "player-state") {
-      latestState.value = event.payload.payload;
+      acceptPlayerState(event.payload.payload);
       latestError.value = null;
     }
   });
@@ -178,6 +178,29 @@ watch(
     await loadBinding(videoId);
   }
 );
+
+function acceptPlayerState(nextState: PlayerState) {
+  const currentState = latestState.value;
+
+  if (!currentState) {
+    latestState.value = nextState;
+    return;
+  }
+
+  if (!nextState.paused) {
+    latestState.value = nextState;
+    return;
+  }
+
+  if (currentState.paused) {
+    latestState.value = nextState;
+    return;
+  }
+
+  if (nextState.videoId === currentState.videoId) {
+    latestState.value = nextState;
+  }
+}
 
 async function loadBinding(videoId: string) {
   bindingError.value = null;
