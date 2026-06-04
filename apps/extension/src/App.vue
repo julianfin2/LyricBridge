@@ -116,8 +116,8 @@ function formatTime(value: number | null): string {
     <header>
       <img src="/icons/48x48.png" alt="" />
       <div>
-        <h1>LyricBridge</h1>
-        <p>YouTube 歌词同步</p>
+        <h1>YouTube 歌词同步扩展</h1>
+        <!-- <p>YouTube 歌词同步</p> -->
       </div>
     </header>
 

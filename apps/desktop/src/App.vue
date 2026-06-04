@@ -665,8 +665,8 @@ function hexToRgba(hex: string, alpha: number): string {
       <div class="brand">
         <img src="/icon.png" alt="" />
         <div>
-          <h1>LyricBridge</h1>
-          <p>YouTube 桌面歌词桥接工具</p>
+          <h1>Youtube 歌词同步器</h1>
+          <!-- <p>YouTube 桌面歌词桥接工具</p> -->
         </div>
       </div>
       <div class="status-stack">

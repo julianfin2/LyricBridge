@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "LyricBridge YouTube 歌词桥",
+  "name": "LyricBridge YouTube 歌词同步",
   "description": "将 YouTube 播放进度发送到 LyricBridge 桌面端。",
   "version": "0.1.0",
   "action": {
