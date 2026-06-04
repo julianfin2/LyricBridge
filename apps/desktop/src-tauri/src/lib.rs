@@ -439,7 +439,7 @@ fn default_overlay_position(
     let monitor_height = monitor_size.height as i32;
 
     let x = monitor_position.x + ((monitor_width - width) / 2).max(0);
-    let y = monitor_position.y + ((monitor_height as f64 * 0.72) as i32 - height / 2);
+    let y = monitor_position.y + ((monitor_height as f64 * 0.90) as i32 - height / 2);
     let max_y = monitor_position.y + (monitor_height - height).max(0);
 
     Ok(PhysicalPosition::new(x, y.clamp(monitor_position.y, max_y)))
