@@ -564,6 +564,9 @@ fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
         .show()
         .map_err(|error| format!("显示主窗口失败：{error}"))?;
     window
+        .unminimize()
+        .map_err(|error| format!("还原主窗口失败：{error}"))?;
+    window
         .set_focus()
         .map_err(|error| format!("聚焦主窗口失败：{error}"))
 }
