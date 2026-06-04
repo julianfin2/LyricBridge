@@ -85,6 +85,9 @@ const windowSource = isLyricsWindow ? "lyrics" : "main";
 
 if (isLyricsWindow) {
   document.documentElement.classList.add("lyrics-root");
+  window.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+  });
 }
 
 const parsedLrc = computed<ParsedLrc | null>(() => {
