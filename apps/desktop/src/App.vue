@@ -504,12 +504,12 @@ input {
 }
 
 .topbar {
-  min-height: 86px;
+  min-height: 72px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  padding: 18px 24px;
+  gap: 14px;
+  padding: 12px 22px;
   background: rgba(255, 255, 255, 0.82);
   border-bottom: 1px solid rgba(142, 159, 176, 0.22);
   box-sizing: border-box;
@@ -520,26 +520,26 @@ input {
   display: flex;
   align-items: center;
   min-width: 0;
-  gap: 14px;
+  gap: 12px;
 }
 
 .brand img {
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   flex: 0 0 auto;
   border-radius: 12px;
 }
 
 h1 {
-  margin: 0 0 4px;
-  font-size: 28px;
+  margin: 0 0 3px;
+  font-size: 25px;
   line-height: 1.1;
 }
 
 .brand p {
   margin: 0;
   color: #637083;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .status-stack {
@@ -554,8 +554,8 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 34px;
-  padding: 0 12px;
+  min-height: 30px;
+  padding: 0 10px;
   color: #7f1d1d;
   background: #fff1f2;
   border: 1px solid rgba(244, 63, 94, 0.28);
@@ -586,30 +586,30 @@ h1 {
 .hero-band {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(360px, 1fr);
-  gap: 18px;
-  padding: 22px 24px 0;
+  gap: 14px;
+  padding: 16px 22px 0;
 }
 
 .now-playing {
   min-width: 0;
   display: grid;
   align-content: center;
-  gap: 10px;
-  min-height: 150px;
-  padding: 22px;
+  gap: 8px;
+  min-height: 108px;
+  padding: 16px 18px;
   color: #f8fafc;
   background:
     linear-gradient(135deg, rgba(20, 184, 166, 0.92), rgba(37, 99, 235, 0.86)),
     #0f766e;
   border: 1px solid rgba(255, 255, 255, 0.38);
-  border-radius: 18px;
-  box-shadow: 0 18px 38px rgba(15, 118, 110, 0.2);
+  border-radius: 16px;
+  box-shadow: 0 12px 26px rgba(15, 118, 110, 0.18);
 }
 
 .now-playing strong {
   min-width: 0;
   overflow: hidden;
-  font-size: 26px;
+  font-size: 24px;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -625,7 +625,7 @@ h1 {
 .metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
   margin: 0;
 }
 
@@ -633,13 +633,13 @@ h1 {
 .surface {
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(142, 159, 176, 0.22);
-  border-radius: 16px;
-  box-shadow: 0 14px 30px rgba(43, 58, 84, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 10px 22px rgba(43, 58, 84, 0.07);
 }
 
 .metrics div {
   min-width: 0;
-  padding: 16px;
+  padding: 10px 13px;
 }
 
 dt,
@@ -650,33 +650,33 @@ dt,
 }
 
 dd {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   overflow-wrap: anywhere;
   color: #172033;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 750;
 }
 
 .content-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(360px, 1fr);
-  gap: 18px;
-  padding: 18px 24px 24px;
+  gap: 14px;
+  padding: 12px 22px 18px;
 }
 
 .surface {
   min-width: 0;
-  padding: 18px;
+  padding: 12px 14px;
   box-sizing: border-box;
 }
 
 .lyrics {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .primary-surface {
-  min-height: 292px;
+  min-height: 142px;
   align-content: start;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.86)),
@@ -686,7 +686,7 @@ dd {
 .side-column {
   display: grid;
   align-content: start;
-  gap: 18px;
+  gap: 14px;
 }
 
 .section-heading {
@@ -706,31 +706,31 @@ dd {
 }
 
 .current-line {
-  min-height: 72px;
+  min-height: 38px;
   margin: 0;
   color: #111827;
-  font-size: 34px;
+  font-size: 28px;
   font-weight: 800;
   line-height: 1.28;
 }
 
 .next-line {
-  min-height: 32px;
+  min-height: 26px;
   margin: 0;
   color: #64748b;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.4;
 }
 
 .control-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 9px;
 }
 
 button {
   min-width: 0;
-  height: 40px;
+  height: 36px;
   color: #ffffff;
   background: #0f766e;
   border: 1px solid rgba(15, 118, 110, 0.28);
@@ -762,16 +762,16 @@ button:disabled {
 .config-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 10px;
+  gap: 9px;
+  margin-top: 9px;
 }
 
 .path-display {
   min-width: 0;
-  min-height: 46px;
+  min-height: 40px;
   display: flex;
   align-items: center;
-  margin: 12px 0 0;
+  margin: 9px 0 0;
   padding: 0 12px;
   overflow-wrap: anywhere;
   color: #172033;
@@ -783,7 +783,7 @@ button:disabled {
 
 .hint,
 .error {
-  margin: 12px 0 0;
+  margin: 9px 0 0;
   overflow-wrap: anywhere;
   font-size: 14px;
 }
@@ -793,7 +793,7 @@ button:disabled {
 }
 
 .compact {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .error {
@@ -801,8 +801,8 @@ button:disabled {
 }
 
 .error-list {
-  margin: 0 24px 24px;
-  padding: 14px 16px;
+  margin: 0 22px 20px;
+  padding: 12px 14px;
   background: #fff1f2;
   border: 1px solid rgba(244, 63, 94, 0.22);
   border-radius: 14px;
