@@ -198,7 +198,7 @@ const floatingNextLyricText = computed(() => {
     return nextLyric.value.text;
   }
 
-  return activeBinding.value ? " " : "等待已配置的 YouTube 歌词";
+  return " ";
 });
 
 const previewNextLyricText = computed(() => {
@@ -655,7 +655,7 @@ function hexToRgba(hex: string, alpha: number): string {
     @mousedown="startOverlayDrag"
   >
     <section class="floating-lyrics">
-      <p class="floating-current">{{ currentLyric?.text || "LyricBridge" }}</p>
+      <p class="floating-current">{{ currentLyric?.text || "未找到歌词" }}</p>
       <p class="floating-next">{{ floatingNextLyricText }}</p>
     </section>
   </main>
