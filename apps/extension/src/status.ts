@@ -8,6 +8,7 @@ export type ExtensionPlaybackStatus = {
   isYouTubePage: boolean;
   paused: boolean;
   playbackRate: number;
+  sourceTabActive?: boolean;
   tabId: number | null;
   title: string | null;
   updatedAt: number;
