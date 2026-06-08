@@ -169,6 +169,8 @@ const currentLyric = computed(() => {
   return parsedLrc.value.lines[activeLyricIndex.value] ?? null;
 });
 
+const floatingCurrentLyricText = computed(() => currentLyric.value?.text || "未找到歌词");
+
 const previousLyric = computed(() => {
   if (!parsedLrc.value || activeLyricIndex.value <= 0) {
     return null;
@@ -200,6 +202,19 @@ const floatingNextLyricText = computed(() => {
 
   return " ";
 });
+
+const floatingLyricLines = computed(() => [
+  {
+    key: currentLyric.value ? `line-${activeLyricIndex.value}` : "empty-current",
+    role: "current",
+    text: floatingCurrentLyricText.value
+  },
+  {
+    key: nextLyric.value ? `line-${activeLyricIndex.value + 1}` : `empty-next-${activeLyricIndex.value}`,
+    role: "next",
+    text: floatingNextLyricText.value
+  }
+]);
 
 const previewNextLyricText = computed(() => {
   if (nextLyric.value) {
@@ -654,10 +669,16 @@ function hexToRgba(hex: string, alpha: number): string {
     :style="overlayStyleVars"
     @mousedown="startOverlayDrag"
   >
-    <section class="floating-lyrics">
-      <p class="floating-current">{{ currentLyric?.text || "未找到歌词" }}</p>
-      <p class="floating-next">{{ floatingNextLyricText }}</p>
-    </section>
+    <TransitionGroup tag="section" name="lyric-flow" class="floating-lyrics">
+      <p
+        v-for="line in floatingLyricLines"
+        :key="line.key"
+        class="floating-line"
+        :class="line.role"
+      >
+        {{ line.text }}
+      </p>
+    </TransitionGroup>
   </main>
 
   <main v-else class="shell">
@@ -1626,14 +1647,18 @@ button:disabled {
 }
 
 .floating-lyrics {
+  position: relative;
   display: grid;
+  grid-template-rows:
+    minmax(calc(var(--floating-current-size) * 1.18), auto)
+    minmax(calc(var(--floating-next-size) * 1.25), auto);
   gap: 6px;
   text-align: center;
 }
 
-.floating-current,
-.floating-next {
+.floating-line {
   margin: 0;
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1644,20 +1669,57 @@ button:disabled {
     -1px 0 0 var(--floating-shadow-color),
     0 1px 0 var(--floating-shadow-color),
     0 -1px 0 var(--floating-shadow-color);
+  transition:
+    color 260ms ease,
+    font-size 260ms ease,
+    font-weight 260ms ease,
+    line-height 260ms ease;
 }
 
-.floating-current {
-  position: relative;
+.floating-line.current {
   color: var(--floating-current-color);
   font-size: var(--floating-current-size);
   font-weight: var(--floating-font-weight);
   line-height: 1.18;
 }
 
-.floating-next {
+.floating-line.next {
   color: var(--floating-next-color);
   font-size: var(--floating-next-size);
   font-weight: var(--floating-next-font-weight);
   line-height: 1.25;
+}
+
+.lyric-flow-enter-active,
+.lyric-flow-leave-active,
+.lyric-flow-move {
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease,
+    filter 220ms ease,
+    color 260ms ease,
+    font-size 260ms ease,
+    font-weight 260ms ease,
+    line-height 260ms ease;
+}
+
+.lyric-flow-leave-active {
+  position: absolute;
+  width: 100%;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+.lyric-flow-enter-from {
+  opacity: 0;
+  filter: blur(2px);
+  transform: translateY(12px);
+}
+
+.lyric-flow-leave-to {
+  opacity: 0;
+  filter: blur(2px);
+  transform: translateY(-12px);
 }
 </style>
