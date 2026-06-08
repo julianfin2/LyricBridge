@@ -150,7 +150,7 @@ impl Default for OverlayStyleSettings {
         Self {
             current_font_size: 42,
             next_font_size: 24,
-            current_color: "#f8fafc".to_string(),
+            current_color: "#f7ed78".to_string(),
             next_color: "#f8fafc".to_string(),
             shadow_color: "#000000".to_string(),
             shadow_opacity: 0.9,
@@ -945,7 +945,7 @@ fn sanitize_overlay_style_settings(settings: OverlayStyleSettings) -> OverlaySty
     OverlayStyleSettings {
         current_font_size: settings.current_font_size.clamp(24, 72),
         next_font_size: settings.next_font_size.clamp(14, 48),
-        current_color: sanitize_hex_color(&settings.current_color, "#f8fafc"),
+        current_color: sanitize_hex_color(&settings.current_color, "#f7ed78"),
         next_color: sanitize_hex_color(&settings.next_color, "#f8fafc"),
         shadow_color: sanitize_hex_color(&settings.shadow_color, "#000000"),
         shadow_opacity: settings.shadow_opacity.clamp(0.0, 1.0),

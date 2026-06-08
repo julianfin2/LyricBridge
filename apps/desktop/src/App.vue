@@ -103,7 +103,7 @@ const overlaySettings = ref<OverlaySettings>({
 const overlayStyleSettings = ref<OverlayStyleSettings>({
   currentFontSize: 42,
   nextFontSize: 24,
-  currentColor: "#f8fafc",
+  currentColor: "#f7ed78",
   nextColor: "#f8fafc",
   shadowColor: "#000000",
   shadowOpacity: 0.9,
