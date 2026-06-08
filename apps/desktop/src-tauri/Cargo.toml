@@ -1,6 +1,6 @@
 [package]
 name = "lyricbridge-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "Desktop lyrics bridge for browser playback"
 authors = ["Julian F."]
 edition = "2021"

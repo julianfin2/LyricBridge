@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LyricBridge YouTube 歌词同步",
   "description": "将 YouTube 播放进度发送到 LyricBridge 桌面端。",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "action": {
     "default_title": "LyricBridge",
     "default_popup": "index.html",
