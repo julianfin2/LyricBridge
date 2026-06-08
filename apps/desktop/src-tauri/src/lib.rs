@@ -75,6 +75,7 @@ impl Default for BridgeConnectionStatus {
 #[serde(rename_all = "camelCase")]
 struct LyricBindingWithContent {
     video_id: String,
+    lyric_file: String,
     lyric_file_path: String,
     offset_ms: i32,
     lyric_text: String,
@@ -651,6 +652,7 @@ fn read_binding_lyric_content(
 
     Ok(Some(LyricBindingWithContent {
         video_id: binding.video_id,
+        lyric_file: binding.lyric_file,
         lyric_file_path: lyric_path.to_string_lossy().into_owned(),
         offset_ms: binding.offset_ms,
         lyric_text,

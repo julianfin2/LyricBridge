@@ -29,6 +29,7 @@ type ConfigDirectoryStatus = {
 
 type LyricBindingWithContent = {
   videoId: string;
+  lyricFile: string;
   lyricFilePath: string;
   offsetMs: number;
   lyricText: string;
@@ -439,7 +440,7 @@ async function loadBinding(videoId: string) {
     }
 
     applyBinding(binding);
-    addLog("success", `已加载歌词：${videoName}`);
+    addLog("success", `已加载歌词：${binding.lyricFile}`);
   } catch (error) {
     bindingError.value = String(error);
     addLog("error", `加载歌词失败：${bindingError.value}`);
@@ -539,7 +540,7 @@ async function loadLocalBinding(videoId: string) {
     }
 
     applyBinding(binding);
-    addLog("success", `已加载本地歌词：${videoName}`);
+    addLog("success", `已加载本地歌词：${binding.lyricFile}`);
   } catch (error) {
     bindingError.value = String(error);
     addLog("error", `加载本地歌词失败：${bindingError.value}`);
